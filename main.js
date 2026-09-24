@@ -5,7 +5,7 @@ const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("SFS Multi-Bot with Config Banner is running!");
+    res.write("SFS Safe Multi-Bot is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
@@ -28,6 +28,12 @@ async function updateMemberCount(guild, channelId) {
     }
 }
 
+// 🤬 רשימת קללות ומילים אסורות (תוכל להוסיף או לשנות כאן מילים בתוך הגרשיים)
+const bannedWords = [
+    'שרמוטה', 'זונה', 'מניאק', 'קוקסינל', 'הומו', 'נאצי', 'כוסאמאק', 'זין', 'שרמוט', 'בן זונה',
+    'fuck', 'bitch', 'asshole', 'nigger', 'nigga', 'whore', 'slut'
+];
+
 const activeClears = new Map();
 
 async function main() {
@@ -44,7 +50,7 @@ async function main() {
     });
 
     client.once('ready', async () => { 
-        console.log(`Bot connected as ${client.user.tag}!`); 
+        console.log(`Bot connected as ${client.user.tag}! Auto-Mod Active.`); 
         client.guilds.cache.forEach(guild => {
             updateMemberCount(guild, config.memberCountChannelId);
         });
@@ -52,10 +58,7 @@ async function main() {
 
     // 🎈 מערכת ברוכים הבאים
     client.on('guildMemberAdd', async (member) => {
-        // מושך את קישור הבאנר ישירות מקובץ הקונפיג שעדכנת
         const bannerUrl = config.bannerUrl;
-
-        // 1. הודעה מעוצבת בפרטי (DM)
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
@@ -88,12 +91,40 @@ async function main() {
         updateMemberCount(member.guild, config.memberCountChannelId);
     });
 
-    // 🧹 מערכת ניקוי צ'אט
+    // 🛡️ מערכת ניקוי צ'אט + Auto-Mod (הגנה אוטומטית)
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
         const hasAllowedRole = message.member.roles.cache.has(config.allowedClearRoleId);
 
+        // ----------------------------------------------------
+        // חלק א': Auto-Mod - פועל רק על משתמשים שאין להם את רול הניהול
+        // ----------------------------------------------------
+        if (!hasAllowedRole) {
+            const messageContentLower = message.content.toLowerCase();
+
+            // 1. בדיקת קללות ומילים אסורות
+            const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
+            
+            if (containsBannedWord) {
+                await message.delete().catch(() => null); // מחיקת ההודעה המקוללת בשנייה
+                return message.channel.send(`⚠️ ${message.author}, שמור על השפה שלך! אסור לקלל בשרת הזה. ❌`).then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000); // מחיקת האזהרה אחרי 4 שניות
+                });
+            }
+
+            // 2. בדיקת קישורי הזמנה לשרתים אחרים (Anti-Invite)
+            if (messageContentLower.includes('discord.gg/') || messageContentLower.includes('://discord.com')) {
+                await message.delete().catch(() => null); // מחיקת הקישור המפרסם בשנייה
+                return message.channel.send(`🚫 ${message.author}, חל איסור מוחלט לפרסם שרתי דיסקורד אחרים! ❌`).then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000);
+                });
+            }
+        }
+
+        // ----------------------------------------------------
+        // חלק ב': מערכת ניקוי צ'אט האינטראקטיבית (!clear)
+        // ----------------------------------------------------
         if (message.content.trim() === 'ניקוי') {
             if (!hasAllowedRole) {
                 return message.reply('אין לך את הרול המתאים כדי לנהל שיחת ניקוי עם הבוט! ❌').then(msg => {
@@ -133,4 +164,3 @@ async function main() {
 }
 
 main().catch(console.error);
-
