@@ -7,7 +7,9 @@ const http = require('http');
 http.createServer((req, res) => {
     res.write("Welcome & Member Count Bot is running!");
     res.end();
-}).listen(process.env.PORT || 3000);
+}).listen(process.env.PORT || 3000, () => {
+    console.log("Web server is alive!");
+});
 
 async function loadConfig() {
     const configPath = path.join(__dirname, 'config.json');
@@ -17,48 +19,46 @@ async function loadConfig() {
 
 // פונקציה שמעדכנת את מונה המשתמשים בערוץ הקולי
 async function updateMemberCount(guild, channelId) {
-    const memberCountChannel = guild.channels.cache.get(channelId);
-    if (memberCountChannel) {
-        // מביא את הכמות המדויקת של האנשים בשרת
-        const totalMembers = guild.memberCount;
-        await memberCountChannel.setName(`👥 חברים בשרת: ${totalMembers}`).catch(console.error);
-        console.log(`מונה המשתמשים עודכן בהצלחה ל: ${totalMembers}`);
-    } else {
-        console.log("שגיאה: לא נמצא ערוץ מונה משתמשים עם ה-ID שסופק.");
+    if (!channelId) return;
+    try {
+        const memberCountChannel = await guild.channels.fetch(channelId).catch(() => null);
+        if (memberCountChannel) {
+            const totalMembers = guild.memberCount;
+            await memberCountChannel.setName(`👥 חברים בשרת: ${totalMembers}`);
+            console.log(`מונה עודכן ל: ${totalMembers}`);
+        }
+    } catch (error) {
+        console.error("שגיאה בעדכון המונה:", error.message);
     }
 }
 
 async function main() {
     const config = await loadConfig();
-    
-    // משיכת הטוקן בצורה מאובטחת מהאתר Render
     const botToken = config.token === "PROCESS_ENV_TOKEN" ? process.env.DISCORD_TOKEN : config.token;
 
+    // ⚙️ הגדרת כל האישורים הנדרשים כדי למנוע קריסה של הבוט
     const client = new Client({
         intents: [
             GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMembers, // 👥 חובה כדי לזהות כניסה ויציאה של משתמשים
-            GatewayIntentBits.GuildMessages
+            GatewayIntentBits.GuildMembers, // 👥 חובה לכניסה ויציאה
+            GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.MessageContent
         ]
     });
 
     client.once('ready', async () => { 
         console.log(`Bot connected as ${client.user.tag}!`); 
-        
-        // כשהבוט נדלק, הוא מעדכן את המונה פעם ראשונה בכל השרתים
-        client.guilds.cache.forEach(async (guild) => {
-            await updateMemberCount(guild, config.memberCountChannelId);
+        client.guilds.cache.forEach(guild => {
+            updateMemberCount(guild, config.memberCountChannelId);
         });
     });
 
-    // 🎈 אירוע 1: מישהו נכנס לשרת (שולח הודעות ומעדכן מונה)
+    // 🎈 אירוע כניסת משתמש
     client.on('guildMemberAdd', async (member) => {
-        console.log(`${member.user.tag} הצטרף לשרת.`);
+        console.log(`${member.user.tag} נכנס לשרת.`);
+        const bannerUrl = 'תדביק_כאן_את_הקישור_של_התמונה_מדיסקורד';
 
-        // קישור התמונה שלך (הבאנר הסגול)
-        const bannerUrl = 'https://cdn.discordapp.com/attachments/1552769614818058335/1552789243393343579/image.png?ex=6ab6e32d&is=6ab591ad&hm=902ff97601c1b774187fa1e6e9934f6dca6da1322dd4cf7177e975e10876d99b&';
-
-        // א. שליחת הודעת ה-Embed בפרטי (DM)
+        // 1. הודעה בפרטי
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
@@ -76,28 +76,24 @@ async function main() {
             .setImage(bannerUrl)
             .setTimestamp();
 
-        try {
-            await member.send({ embeds: [welcomeEmbed] });
-        } catch (err) {
-            console.log("לא ניתן לשלוח הודעה בפרטי (חסום).");
-        }
+        try { await member.send({ embeds: [welcomeEmbed] }); } catch (e) {}
 
-        // ב. שליחת התמונה והתיוג בחדר השרת
+        // 2. הודעה ותמונה בערוץ בשרת
         const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
         if (welcomeChannel) {
             const imageEmbed = new EmbedBuilder().setColor('#5865F2').setImage(bannerUrl);
-            await welcomeChannel.send({ embeds: [imageEmbed] }).catch(console.error);
-            await welcomeChannel.send(`${member} ברוך הבא יעמה! מקווים שתהנה💜`).catch(console.error);
+            await welcomeChannel.send({ embeds: [imageEmbed] }).catch(() => null);
+            await welcomeChannel.send(`${member} ברוך הבא יעמה! מקווים שתהנה💜`).catch(() => null);
         }
 
-        // ג. עדכון מונה המשתמשים כלפי מעלה
-        await updateMemberCount(member.guild, config.memberCountChannelId);
+        // 3. עדכון מונה
+        updateMemberCount(member.guild, config.memberCountChannelId);
     });
 
-    // 🏃‍♂️ אירוע 2: מישהו עוזב את השרת (מעדכן מונה כלפי מטה)
+    // 🏃‍♂️ אירוע עזיבת משתמש
     client.on('guildMemberRemove', async (member) => {
-        console.log(`${member.user.tag} עזב את השרת.`);
-        await updateMemberCount(member.guild, config.memberCountChannelId);
+        console.log(`${member.user.tag} עזב.`);
+        updateMemberCount(member.guild, config.memberCountChannelId);
     });
 
     client.login(botToken);
