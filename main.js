@@ -5,7 +5,7 @@ const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("SFS Multi-Bot is running!");
+    res.write("SFS Multi-Bot with Custom Banner is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
@@ -39,7 +39,7 @@ async function main() {
             GatewayIntentBits.Guilds,
             GatewayIntentBits.GuildMembers,
             GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent // 💬 חובה כדי שהבוט יקרא את פקודת ה-clear
+            GatewayIntentBits.MessageContent
         ]
     });
 
@@ -54,8 +54,8 @@ async function main() {
     client.on('guildMemberAdd', async (member) => {
         console.log(`${member.user.tag} נכנס לשרת.`);
         
-        // 🖼️ קישור תמונת הבאנר הסגול שלך
-        const bannerUrl = 'תדביק_כאן_את_הקישור_של_התמונה_מדיסקורד';
+        // 🖼️ הקישור הישיר לבאנר המטורף שלך שהוכנס אוטומטית לקוד!
+        const bannerUrl = 'https://media.discordapp.net/attachments/1552769614818058335/1552789243393343579/image.png?ex=6ab6e32d&is=6ab591ad&hm=902ff97601c1b774187fa1e6e9934f6dca6da1322dd4cf7177e975e10876d99b&=&format=webp&quality=lossless';
 
         // 1. הודעה מעוצבת בפרטי (DM)
         const welcomeEmbed = new EmbedBuilder()
@@ -103,29 +103,23 @@ async function main() {
         const command = args.shift().toLowerCase();
 
         if (command === 'clear') {
-            // 🛑 בדיקה: האם למי שכתב את הפקודה יש הרשאה למחוק הודעות בשרת?
             if (!message.member.permissions.has('ManageMessages')) {
                 return message.reply('אין לך הרשאה להשתמש בפקודה הזו! ❌').then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 3000);
                 });
             }
 
-            // מביא את כמות ההודעות שביקשת למחוק
-            const amount = parseInt(args[0]);
+            const amount = parseInt(args);
 
-            // בדיקת תקינות של המספר
             if (isNaN(amount) || amount < 1 || amount > 100) {
                 return message.reply('נא לבחור מספר הודעות למחיקה בין 1 ל-100! 🔢').then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
             }
 
-            // מחיקת ההודעות מהצ'אט (מוסיף 1 כדי למחוק גם את פקודת ה-!clear עצמה)
             await message.channel.bulkDelete(amount + 1, true)
                 .then(deletedMessages => {
-                    // שליחת הודעת אישור קטנה שאומרת כמה נמחקו
                     message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 1}** הודעות מהצ'אט!`).then(msg => {
-                        // ההודעה הזו תימחק לבד אחרי 3 שניות כדי שהצ'אט יישאר נקי לגמרי
                         setTimeout(() => msg.delete().catch(() => null), 3000);
                     });
                 })
@@ -140,4 +134,5 @@ async function main() {
 }
 
 main().catch(console.error);
+
 
