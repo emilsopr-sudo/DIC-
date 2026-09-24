@@ -5,11 +5,9 @@ const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("Welcome & Member Count Bot is running!");
+    res.write("SFS Multi-Bot is running!");
     res.end();
-}).listen(process.env.PORT || 3000, () => {
-    console.log("Web server is alive!");
-});
+}).listen(process.env.PORT || 3000);
 
 async function loadConfig() {
     const configPath = path.join(__dirname, 'config.json');
@@ -36,13 +34,12 @@ async function main() {
     const config = await loadConfig();
     const botToken = config.token === "PROCESS_ENV_TOKEN" ? process.env.DISCORD_TOKEN : config.token;
 
-    // ⚙️ הגדרת כל האישורים הנדרשים כדי למנוע קריסה של הבוט
     const client = new Client({
         intents: [
             GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMembers, // 👥 חובה לכניסה ויציאה
+            GatewayIntentBits.GuildMembers,
             GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent
+            GatewayIntentBits.MessageContent // 💬 חובה כדי שהבוט יקרא את פקודת ה-clear
         ]
     });
 
@@ -53,12 +50,14 @@ async function main() {
         });
     });
 
-    // 🎈 אירוע כניסת משתמש
+    // 🎈 מערכת ברוכים הבאים (Welcome System)
     client.on('guildMemberAdd', async (member) => {
         console.log(`${member.user.tag} נכנס לשרת.`);
+        
+        // 🖼️ קישור תמונת הבאנר הסגול שלך
         const bannerUrl = 'תדביק_כאן_את_הקישור_של_התמונה_מדיסקורד';
 
-        // 1. הודעה בפרטי
+        // 1. הודעה מעוצבת בפרטי (DM)
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
@@ -86,17 +85,59 @@ async function main() {
             await welcomeChannel.send(`${member} ברוך הבא יעמה! מקווים שתהנה💜`).catch(() => null);
         }
 
-        // 3. עדכון מונה
+        // 3. עדכון מונה משתמשים
         updateMemberCount(member.guild, config.memberCountChannelId);
     });
 
-    // 🏃‍♂️ אירוע עזיבת משתמש
+    // 🏃‍♂️ מערכת עזיבת משתמש (עדכון מונה)
     client.on('guildMemberRemove', async (member) => {
-        console.log(`${member.user.tag} עזב.`);
         updateMemberCount(member.guild, config.memberCountChannelId);
+    });
+
+    // 🧹 מערכת ניקוי צ'אט מהירה (!clear)
+    client.on('messageCreate', async (message) => {
+        const prefix = '!';
+        if (!message.content.startsWith(prefix) || message.author.bot) return;
+
+        const args = message.content.slice(prefix.length).trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+
+        if (command === 'clear') {
+            // 🛑 בדיקה: האם למי שכתב את הפקודה יש הרשאה למחוק הודעות בשרת?
+            if (!message.member.permissions.has('ManageMessages')) {
+                return message.reply('אין לך הרשאה להשתמש בפקודה הזו! ❌').then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 3000);
+                });
+            }
+
+            // מביא את כמות ההודעות שביקשת למחוק
+            const amount = parseInt(args[0]);
+
+            // בדיקת תקינות של המספר
+            if (isNaN(amount) || amount < 1 || amount > 100) {
+                return message.reply('נא לבחור מספר הודעות למחיקה בין 1 ל-100! 🔢').then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000);
+                });
+            }
+
+            // מחיקת ההודעות מהצ'אט (מוסיף 1 כדי למחוק גם את פקודת ה-!clear עצמה)
+            await message.channel.bulkDelete(amount + 1, true)
+                .then(deletedMessages => {
+                    // שליחת הודעת אישור קטנה שאומרת כמה נמחקו
+                    message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 1}** הודעות מהצ'אט!`).then(msg => {
+                        // ההודעה הזו תימחק לבד אחרי 3 שניות כדי שהצ'אט יישאר נקי לגמרי
+                        setTimeout(() => msg.delete().catch(() => null), 3000);
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    message.channel.send('התרחשה שגיאה בניסיון למחוק הודעות. (שים לב שאי אפשר למחוק הודעות ישנות משבועיים!) ❌');
+                });
+        }
     });
 
     client.login(botToken);
 }
 
 main().catch(console.error);
+
