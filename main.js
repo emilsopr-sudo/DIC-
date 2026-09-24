@@ -1,11 +1,11 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("Welcome Bot is running!");
+    res.write("Welcome Bot SFS is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
@@ -30,27 +30,41 @@ async function main() {
     });
 
     client.once('ready', () => { 
-        console.log(`Welcome Bot connected as ${client.user.tag}!`); 
+        console.log(`Welcome Bot SFS connected as ${client.user.tag}!`); 
     });
 
     // 🎈 אירוע שקורה בכל פעם שמשתמש חדש מצטרף לשרת
     client.on('guildMemberAdd', async (member) => {
-        console.log(`${member.user.tag} הצטרף לשרת!`);
+        console.log(`${member.user.tag} הצטרף לשרת SFS!`);
 
-        // 1. שליחת הודעה פרטית (DM) למשתמש החדש
-        try {
-            await member.send(`ברוך הבא לשרת **${member.guild.name}**! 🎉 שמחים שהצטרפת אלינו, תהנה!`);
-        } catch (err) {
-            console.log("לא ניתן לשלוח הודעה פרטית למשתמש זה (הפרטיות שלו סגורה).");
-        }
+        // 🏙️ יצירת תיבת הודעה מעוצבת וצבעונית (Embed) עם הטקסט שלך
+        const welcomeEmbed = new EmbedBuilder()
+            .setColor('#5865F2') // צבע סגול יפה בצד ההודעה
+            .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
+            .setDescription(
+                `👋 אהלן ${member} וברוך הבא לשרת הרשמי של SFS!\n\n` +
+                `תפסו כיסא בפרלמנט, תכינו קפה ותתחילו להכיר אנשים.\n` +
+                `כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n` +
+                `לפני שאתה קופץ למים, תעשה סיבוב קצר:\n` +
+                `📜 תראה מה מותר ומה אסור ב-ספר-החוקים\n` +
+                `🎭 תבחר מה מעניין אותך ב-קח-רול\n` +
+                `💬 ובוא להגיד שלום ב-הכיכר-המרכזית\n\n` +
+                `יאללה, בלי להתבייש. תהנו! 💜`
+            )
+            .setThumbnail(member.user.displayAvatarURL({ dynamic: true })) // מציג את תמונת הפרופיל של המשתמש
+            .setTimestamp();
 
-        // 2. שליחת הודעה כללית בערוץ הטקסט הראשי של השרת
-        // הבוט יחפש אוטומטית את הערוץ הראשון שהוא יכול לכתוב בו (או ערוץ בשם "welcome")
-        const welcomeChannel = member.guild.channels.cache.find(ch => ch.name.includes('welcome') || ch.name.includes('ברוכים-הבאים')) 
-                               || member.guild.systemChannel;
+        // 🔍 מציאת החדר המדויק לפי ה-ID ששמנו בקובץ config.json
+        const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
 
+        // 🚀 שליחת ההודעה המעוצבת לערוץ הנבחר
         if (welcomeChannel) {
-            welcomeChannel.send(`👋 ברוך הבא לשרת ${member}! שמחים לראות אותך כאן! 🎉`).catch(console.error);
+            welcomeChannel.send({ embeds: [welcomeEmbed] }).catch(console.error);
+        } else {
+            console.log("שגיאה: לא נמצא חדר עם ה-ID שסיפקת בקובץ ההגדרות. שולח לערוץ ברירת המחדל.");
+            if (member.guild.systemChannel) {
+                member.guild.systemChannel.send({ embeds: [welcomeEmbed] }).catch(console.error);
+            }
         }
     });
 
