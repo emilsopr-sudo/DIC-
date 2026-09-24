@@ -5,7 +5,7 @@ const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("SFS Multi-Bot with Advanced Clear is running!");
+    res.write("SFS Multi-Bot with Config Banner is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
@@ -28,7 +28,6 @@ async function updateMemberCount(guild, channelId) {
     }
 }
 
-// מפת זיכרון זמנית כדי לזכור מי נמצא באמצע תהליך ניקוי
 const activeClears = new Map();
 
 async function main() {
@@ -53,7 +52,10 @@ async function main() {
 
     // 🎈 מערכת ברוכים הבאים
     client.on('guildMemberAdd', async (member) => {
-        const bannerUrl = 'https://discordapp.net';
+        // מושך את קישור הבאנר ישירות מקובץ הקונפיג שעדכנת
+        const bannerUrl = config.bannerUrl;
+
+        // 1. הודעה מעוצבת בפרטי (DM)
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
@@ -86,15 +88,12 @@ async function main() {
         updateMemberCount(member.guild, config.memberCountChannelId);
     });
 
-    // 🧹 מערכת צ'אט אינטרנטית ונעולה לרול ספציפי
+    // 🧹 מערכת ניקוי צ'אט
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        // 🛑 שלב א': בדיקת הרול המורשה
-        // הבוט בודק אם למשתמש שכתב יש את הרול הייחודי שמוגדר ב-config.json
         const hasAllowedRole = message.member.roles.cache.has(config.allowedClearRoleId);
 
-        // אם המשתמש מנסה להתחיל תהליך ניקוי
         if (message.content.trim() === 'ניקוי') {
             if (!hasAllowedRole) {
                 return message.reply('אין לך את הרול המתאים כדי לנהל שיחת ניקוי עם הבוט! ❌').then(msg => {
@@ -102,28 +101,21 @@ async function main() {
                     setTimeout(() => message.delete().catch(() => null), 3000);
                 });
             }
-
-            // מסמן בזיכרון שהמשתמש הזה התחיל תהליך ניקוי בחדר הזה
             activeClears.set(`${message.author.id}-${message.channel.id}`, true);
             return message.reply('כמה? 🤔');
         }
 
-        // 🛑 שלב ב': המשתמש המורשה עונה "כמה" הודעות למחוק
         const sessionKey = `${message.author.id}-${message.channel.id}`;
         if (activeClears.has(sessionKey)) {
-            // מוחק את הסטטוס הזמני מהזיכרון כדי שלא ייתקע בלולאה
             activeClears.delete(sessionKey);
-
             const amount = parseInt(message.content.trim());
 
-            // בדיקה אם המשתמש החזיר מספר תקין
             if (isNaN(amount) || amount < 1 || amount > 100) {
                 return message.reply('התהליך בוטל. נא לבחור מספר תקין בין 1 ל-100 בשלב הבא! 🔢').then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
             }
 
-            // ביצוע מחיקה המונית (מוחק את הודעת המספר, את הודעת ה"כמה?" של הבוט, ואת כמות ההודעות שביקשת)
             await message.channel.bulkDelete(amount + 2, true)
                 .then(deletedMessages => {
                     message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 2}** הודעות לבקשתך!`).then(msg => {
@@ -141,3 +133,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
