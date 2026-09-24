@@ -56,7 +56,7 @@ async function main() {
         console.log(`${member.user.tag} הצטרף לשרת.`);
 
         // קישור התמונה שלך (הבאנר הסגול)
-        const bannerUrl = 'תדביק_כאן_את_הקישור_של_התמונה_מדיסקורד';
+        const bannerUrl = 'https://cdn.discordapp.com/attachments/1552769614818058335/1552789243393343579/image.png?ex=6ab6e32d&is=6ab591ad&hm=902ff97601c1b774187fa1e6e9934f6dca6da1322dd4cf7177e975e10876d99b&';
 
         // א. שליחת הודעת ה-Embed בפרטי (DM)
         const welcomeEmbed = new EmbedBuilder()
