@@ -5,7 +5,7 @@ const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("SFS Multi-Bot with Custom Banner is running!");
+    res.write("SFS Multi-Bot with Advanced Clear is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
@@ -15,7 +15,6 @@ async function loadConfig() {
     return JSON.parse(configData);
 }
 
-// פונקציה שמעדכנת את מונה המשתמשים בערוץ הקולי
 async function updateMemberCount(guild, channelId) {
     if (!channelId) return;
     try {
@@ -23,12 +22,14 @@ async function updateMemberCount(guild, channelId) {
         if (memberCountChannel) {
             const totalMembers = guild.memberCount;
             await memberCountChannel.setName(`👥 חברים בשרת: ${totalMembers}`);
-            console.log(`מונה עודכן ל: ${totalMembers}`);
         }
     } catch (error) {
         console.error("שגיאה בעדכון המונה:", error.message);
     }
 }
+
+// מפת זיכרון זמנית כדי לזכור מי נמצא באמצע תהליך ניקוי
+const activeClears = new Map();
 
 async function main() {
     const config = await loadConfig();
@@ -50,14 +51,9 @@ async function main() {
         });
     });
 
-    // 🎈 מערכת ברוכים הבאים (Welcome System)
+    // 🎈 מערכת ברוכים הבאים
     client.on('guildMemberAdd', async (member) => {
-        console.log(`${member.user.tag} נכנס לשרת.`);
-        
-        // 🖼️ הקישור הישיר לבאנר המטורף שלך שהוכנס אוטומטית לקוד!
-        const bannerUrl = 'https://media.discordapp.net/attachments/1552769614818058335/1552789243393343579/image.png?ex=6ab6e32d&is=6ab591ad&hm=902ff97601c1b774187fa1e6e9934f6dca6da1322dd4cf7177e975e10876d99b&=&format=webp&quality=lossless';
-
-        // 1. הודעה מעוצבת בפרטי (DM)
+        const bannerUrl = 'https://discordapp.net';
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
@@ -77,55 +73,66 @@ async function main() {
 
         try { await member.send({ embeds: [welcomeEmbed] }); } catch (e) {}
 
-        // 2. הודעה ותמונה בערוץ בשרת
         const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
         if (welcomeChannel) {
             const imageEmbed = new EmbedBuilder().setColor('#5865F2').setImage(bannerUrl);
             await welcomeChannel.send({ embeds: [imageEmbed] }).catch(() => null);
             await welcomeChannel.send(`${member} ברוך הבא יעמה! מקווים שתהנה💜`).catch(() => null);
         }
-
-        // 3. עדכון מונה משתמשים
         updateMemberCount(member.guild, config.memberCountChannelId);
     });
 
-    // 🏃‍♂️ מערכת עזיבת משתמש (עדכון מונה)
     client.on('guildMemberRemove', async (member) => {
         updateMemberCount(member.guild, config.memberCountChannelId);
     });
 
-    // 🧹 מערכת ניקוי צ'אט מהירה (!clear)
+    // 🧹 מערכת צ'אט אינטרנטית ונעולה לרול ספציפי
     client.on('messageCreate', async (message) => {
-        const prefix = '!';
-        if (!message.content.startsWith(prefix) || message.author.bot) return;
+        if (message.author.bot || !message.guild) return;
 
-        const args = message.content.slice(prefix.length).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
+        // 🛑 שלב א': בדיקת הרול המורשה
+        // הבוט בודק אם למשתמש שכתב יש את הרול הייחודי שמוגדר ב-config.json
+        const hasAllowedRole = message.member.roles.cache.has(config.allowedClearRoleId);
 
-        if (command === 'clear') {
-            if (!message.member.permissions.has('ManageMessages')) {
-                return message.reply('אין לך הרשאה להשתמש בפקודה הזו! ❌').then(msg => {
+        // אם המשתמש מנסה להתחיל תהליך ניקוי
+        if (message.content.trim() === 'ניקוי') {
+            if (!hasAllowedRole) {
+                return message.reply('אין לך את הרול המתאים כדי לנהל שיחת ניקוי עם הבוט! ❌').then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 3000);
+                    setTimeout(() => message.delete().catch(() => null), 3000);
                 });
             }
 
-            const amount = parseInt(args);
+            // מסמן בזיכרון שהמשתמש הזה התחיל תהליך ניקוי בחדר הזה
+            activeClears.set(`${message.author.id}-${message.channel.id}`, true);
+            return message.reply('כמה? 🤔');
+        }
 
+        // 🛑 שלב ב': המשתמש המורשה עונה "כמה" הודעות למחוק
+        const sessionKey = `${message.author.id}-${message.channel.id}`;
+        if (activeClears.has(sessionKey)) {
+            // מוחק את הסטטוס הזמני מהזיכרון כדי שלא ייתקע בלולאה
+            activeClears.delete(sessionKey);
+
+            const amount = parseInt(message.content.trim());
+
+            // בדיקה אם המשתמש החזיר מספר תקין
             if (isNaN(amount) || amount < 1 || amount > 100) {
-                return message.reply('נא לבחור מספר הודעות למחיקה בין 1 ל-100! 🔢').then(msg => {
+                return message.reply('התהליך בוטל. נא לבחור מספר תקין בין 1 ל-100 בשלב הבא! 🔢').then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
             }
 
-            await message.channel.bulkDelete(amount + 1, true)
+            // ביצוע מחיקה המונית (מוחק את הודעת המספר, את הודעת ה"כמה?" של הבוט, ואת כמות ההודעות שביקשת)
+            await message.channel.bulkDelete(amount + 2, true)
                 .then(deletedMessages => {
-                    message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 1}** הודעות מהצ'אט!`).then(msg => {
+                    message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 2}** הודעות לבקשתך!`).then(msg => {
                         setTimeout(() => msg.delete().catch(() => null), 3000);
                     });
                 })
                 .catch(err => {
                     console.error(err);
-                    message.channel.send('התרחשה שגיאה בניסיון למחוק הודעות. (שים לב שאי אפשר למחוק הודעות ישנות משבועיים!) ❌');
+                    message.channel.send('התרחשה שגיאה. שים לב שאי אפשר למחוק הודעות ישנות משבועיים! ❌');
                 });
         }
     });
@@ -134,5 +141,3 @@ async function main() {
 }
 
 main().catch(console.error);
-
-
