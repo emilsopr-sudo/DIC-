@@ -5,7 +5,7 @@ const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("SFS Custom Premium Bot is running!");
+    res.write("SFS Custom Premium Design Bot with Rules is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
@@ -15,7 +15,7 @@ async function loadConfig() {
     return JSON.parse(configData);
 }
 
-// 👥 עדכון מונה המשתמשים בעיצוב החדש והנקי שלך!
+// 👥 עדכון מונה המשתמשים בעיצוב החדש והמדויק שלך!
 async function updateMemberCount(guild, channelId, welcomeChannelId) {
     if (!channelId || channelId === welcomeChannelId) {
         console.log("התראה: ערוץ המונה לא מוגדר או זהה לערוץ הברכות. העדכון בוטל.");
@@ -25,7 +25,6 @@ async function updateMemberCount(guild, channelId, welcomeChannelId) {
         const memberCountChannel = await guild.channels.fetch(channelId).catch(() => null);
         if (memberCountChannel) {
             const totalMembers = guild.memberCount;
-            // עיצוב מותאם אישית: 👥┋חברים・בשרת・"מספר"
             await memberCountChannel.setName(`👥┋חברים・בשרת・${totalMembers}`);
             console.log(`מונה עודכן בהצלחה ל- ${totalMembers}`);
         }
@@ -56,7 +55,7 @@ async function main() {
     });
 
     client.once('ready', async () => { 
-        console.log(`Bot connected as ${client.user.tag}! Clean management mode active.`); 
+        console.log(`SFS Premium Bot connected as ${client.user.tag}! Rules system active.`); 
         client.guilds.cache.forEach(guild => {
             updateMemberCount(guild, config.memberCountChannelId, config.welcomeChannelId);
         });
@@ -64,10 +63,9 @@ async function main() {
 
     // 🎈 מערכת ברוכים הבאים
     client.on('guildMemberAdd', async (member) => {
-        console.log(`${member.user.tag} נכנס לשרת.`);
+        console.log(`${member.user.tag} נכנס לשרת SFS.`);
         const bannerUrl = config.bannerUrl;
 
-        // 1. הודעה מעוצבת בפרטי (DM)
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
@@ -87,7 +85,6 @@ async function main() {
 
         try { await member.send({ embeds: [welcomeEmbed] }); } catch (e) {}
 
-        // 2. הודעה ותמונה בערוץ בשרת
         const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
         if (welcomeChannel) {
             const imageEmbed = new EmbedBuilder().setColor('#5865F2').setImage(bannerUrl);
@@ -95,22 +92,20 @@ async function main() {
             await welcomeChannel.send(`${member} ברוך הבא יעמה! מקווים שתהנה💜`).catch(() => null);
         }
 
-        // 3. עדכון מונה משתמשים כלפי מעלה
         updateMemberCount(member.guild, config.memberCountChannelId, config.welcomeChannelId);
     });
 
     client.on('guildMemberRemove', async (member) => {
-        // עדכון מונה משתמשים כלפי מטה
         updateMemberCount(member.guild, config.memberCountChannelId, config.welcomeChannelId);
     });
 
-    // 🧹 מערכת ניקוי צ'אט + Auto-Mod
+    // 🧹 מערכת ניקוי צ'אט + Auto-Mod + פקודת ספר חוקים
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
         const hasAllowedRole = message.member.roles.cache.has(config.allowedClearRoleId);
 
-        // Auto-Mod (הגנה אוטומטית)
+        // Auto-Mod (הגנה אוטומטית מקללות)
         if (!hasAllowedRole) {
             const messageContentLower = message.content.toLowerCase();
             const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
@@ -134,7 +129,39 @@ async function main() {
         const args = message.content.slice(prefix.length).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
-        // פקודת ניקוי אינטראקטיבית עם שאילתת "כמה?"
+        // 📜 פקודה חדשה: יצירת חלון החוקים המקצועי לשרת
+        if (command === 'חוקים') {
+            // רק מי שיש לו את רול הניהול יכול לשלוח את חלון החוקים
+            if (!hasAllowedRole) return;
+
+            // מוחק את הודעת הפקודה הישנה שכתבת (!חוקים) כדי להשאיר את הערוץ נקי
+            await message.delete().catch(() => null);
+
+            const rulesEmbed = new EmbedBuilder()
+                .setColor('#5865F2') // צבע סגול פרימיום
+                .setTitle('📜┃ספר החוקים הרשמי — SFS SERVER ♛')
+                .setDescription(
+                    `ברוכים הבאים לפרלמנט של **SFS**. כדי לשמור על שרת מקצועי, בוגר ומהנה לכולם, חובה לקרוא ולכבד את החוקים הבאים:\n\n` +
+                    `⚖️ **[1] כבוד הדדי**\n` +
+                    `יש להתנהג בכבוד לכל חברי השרת ולצוות הניהול. דיבור מגעיל, התגרות או זלזול באחרים יובילו להרחקה מידית מהשרת.\n\n` +
+                    `🚫 **[2] קללות וביטויים פוגעניים**\n` +
+                    `השרת מוגן במערכת אבטחה אוטומטית. חל איסור מוחלט על שימוש בקללות, גזענות, או דיבור פוגעני. הודעות כאלו יימחקו בשנייה והמשתמש ייענש.\n\n` +
+                    `📢 **[3] פרסום וספאם**\n` +
+                    `אין לפרסם שרתי דיסקורד אחרים, קישורים חיצוניים או לבצע ספאם המוני (הצפה של הודעות או תיוגים מיותרים) בצ'אטים.\n\n` +
+                    `🎮 **[4] סדר בחדרים**\n` +
+                    `נא להשתמש בכל חדר למטרה שלו (למשל: פקודות של בוטים בחדר \`#פקודות-בוטים\`, דיבורי גיימינג בחדרים המתאימים וכו').\n\n` +
+                    `🎙️ **[5] שיחות קוליות**\n` +
+                    `אין להספים מוזיקה, לצעוק או להפריע בחדרים הקוליים. משתמשים שלא פעילים יועברו אוטומטית לחדר \`💤┃AFK\`.\n\n` +
+                    `💜 *הנהלת השרת שומרת לעצמה את הזכות לפעול נגד כל משתמש שיפר את הסדר הציבורי בפרלמנט. תהנו!*`
+                )
+                .setThumbnail(message.guild.iconURL({ dynamic: true }))
+                .setFooter({ text: 'SFS SERVER ♛ • שומרים על אווירה טובה' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [rulesEmbed] });
+        }
+
+        // פקודת ניקוי
         if (command === 'ניקוי') {
             if (!hasAllowedRole) {
                 return message.reply('אין לך את הרול המתאים כדי לנהל שיחת ניקוי עם הבוט! ❌').then(msg => {
@@ -169,3 +196,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
