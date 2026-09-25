@@ -1,24 +1,17 @@
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-  res.send('הבוט פעיל 24/7!');
-});
-
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
 
-// 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
+// 🌍 שרת אינטרנט מובנה בשביל Render כדי לשמור על הבוט דולק 24/7
+// UptimeRobot ישלח לכאן פינגים והשרת יחזיר תשובה חיובית
 http.createServer((req, res) => {
-    res.write("SFS Safe Multi-Bot is running!");
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.write("SFS Safe Multi-Bot is running! הבוט פעיל 24/7");
     res.end();
-}).listen(process.env.PORT || 3000);
+}).listen(process.env.PORT || 3000, () => {
+    console.log(`Web server listening on port ${process.env.PORT || 3000}`);
+});
 
 async function loadConfig() {
     const configPath = path.join(__dirname, 'config.json');
@@ -39,7 +32,7 @@ async function updateMemberCount(guild, channelId) {
     }
 }
 
-// 🤬 רשימת קללות ומילים אסורות (תוכל להוסיף או לשנות כאן מילים בתוך הגרשיים)
+// 🤬 רשימת קללות ומילים אסורות
 const bannedWords = [
     'שרמוטה', 'זונה', 'מניאק', 'קוקסינל', 'הומו', 'נאצי', 'כוסאמאק', 'זין', 'שרמוט', 'בן זונה',
     'fuck', 'bitch', 'asshole', 'nigger', 'nigga', 'whore', 'slut'
@@ -118,7 +111,7 @@ async function main() {
             const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
             
             if (containsBannedWord) {
-                await message.delete().catch(() => null); // מחיקת ההודעה המקוללת בשנייה
+                await message.delete().catch(() => null); // מחיקת ההודעה בשנייה
                 return message.channel.send(`⚠️ ${message.author}, שמור על השפה שלך! אסור לקלל בשרת הזה. ❌`).then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000); // מחיקת האזהרה אחרי 4 שניות
                 });
@@ -126,7 +119,7 @@ async function main() {
 
             // 2. בדיקת קישורי הזמנה לשרתים אחרים (Anti-Invite)
             if (messageContentLower.includes('discord.gg/') || messageContentLower.includes('://discord.com')) {
-                await message.delete().catch(() => null); // מחיקת הקישור המפרסם בשנייה
+                await message.delete().catch(() => null); // מחיקת הקישור בשנייה
                 return message.channel.send(`🚫 ${message.author}, חל איסור מוחלט לפרסם שרתי דיסקורד אחרים! ❌`).then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
