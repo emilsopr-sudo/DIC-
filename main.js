@@ -129,16 +129,13 @@ async function main() {
         const args = message.content.slice(prefix.length).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
-        // 📜 פקודה חדשה: יצירת חלון החוקים המקצועי לשרת
+        // 📜 פקודה: יצירת חלון החוקים המקצועי לשרת
         if (command === 'חוקים') {
-            // רק מי שיש לו את רול הניהול יכול לשלוח את חלון החוקים
             if (!hasAllowedRole) return;
-
-            // מוחק את הודעת הפקודה הישנה שכתבת (!חוקים) כדי להשאיר את הערוץ נקי
             await message.delete().catch(() => null);
 
             const rulesEmbed = new EmbedBuilder()
-                .setColor('#5865F2') // צבע סגול פרימיום
+                .setColor('#5865F2')
                 .setTitle('📜┃ספר החוקים הרשמי — SFS SERVER ♛')
                 .setDescription(
                     `ברוכים הבאים לפרלמנט של **SFS**. כדי לשמור על שרת מקצועי, בוגר ומהנה לכולם, חובה לקרוא ולכבד את החוקים הבאים:\n\n` +
