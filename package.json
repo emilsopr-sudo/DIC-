@@ -1,16 +1,15 @@
 {
-  "name": "sfs-discord-bot",
+  "name": "sfs-premium-bot",
   "version": "1.0.0",
-  "description": "SFS (Snapzy Frozi SL) Discord community bot - welcome, moderation, member counter, utilities.",
+  "description": "Premium Welcome and Server Management Bot for SFS",
   "main": "main.js",
   "scripts": {
     "start": "node main.js"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "dependencies": {
     "discord.js": "^14.14.1"
   },
-  "license": "MIT"
+  "engines": {
+    "node": ">=16.0.0"
+  }
 }
