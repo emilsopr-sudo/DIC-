@@ -5,7 +5,7 @@ const http = require('http');
 
 // 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
 http.createServer((req, res) => {
-    res.write("SFS Safe Multi-Bot is running!");
+    res.write("SFS Custom Premium Bot is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
@@ -15,26 +15,32 @@ async function loadConfig() {
     return JSON.parse(configData);
 }
 
-async function updateMemberCount(guild, channelId) {
-    if (!channelId) return;
+// 👥 עדכון מונה המשתמשים בעיצוב החדש והנקי שלך!
+async function updateMemberCount(guild, channelId, welcomeChannelId) {
+    if (!channelId || channelId === welcomeChannelId) {
+        console.log("התראה: ערוץ המונה לא מוגדר או זהה לערוץ הברכות. העדכון בוטל.");
+        return;
+    }
     try {
         const memberCountChannel = await guild.channels.fetch(channelId).catch(() => null);
         if (memberCountChannel) {
             const totalMembers = guild.memberCount;
-            await memberCountChannel.setName(`👥 חברים בשרת: ${totalMembers}`);
+            // עיצוב מותאם אישית: 👥┋חברים・בשרת・"מספר"
+            await memberCountChannel.setName(`👥┋חברים・בשרת・${totalMembers}`);
+            console.log(`מונה עודכן בהצלחה ל- ${totalMembers}`);
         }
     } catch (error) {
         console.error("שגיאה בעדכון המונה:", error.message);
     }
 }
 
-// 🤬 רשימת קללות ומילים אסורות (תוכל להוסיף או לשנות כאן מילים בתוך הגרשיים)
+const activeClears = new Map();
+
+// 🤬 רשימת קללות ומילים אסורות (Auto-Mod)
 const bannedWords = [
     'שרמוטה', 'זונה', 'מניאק', 'קוקסינל', 'הומו', 'נאצי', 'כוסאמאק', 'זין', 'שרמוט', 'בן זונה',
     'fuck', 'bitch', 'asshole', 'nigger', 'nigga', 'whore', 'slut'
 ];
-
-const activeClears = new Map();
 
 async function main() {
     const config = await loadConfig();
@@ -50,15 +56,18 @@ async function main() {
     });
 
     client.once('ready', async () => { 
-        console.log(`Bot connected as ${client.user.tag}! Auto-Mod Active.`); 
+        console.log(`Bot connected as ${client.user.tag}! Clean management mode active.`); 
         client.guilds.cache.forEach(guild => {
-            updateMemberCount(guild, config.memberCountChannelId);
+            updateMemberCount(guild, config.memberCountChannelId, config.welcomeChannelId);
         });
     });
 
     // 🎈 מערכת ברוכים הבאים
     client.on('guildMemberAdd', async (member) => {
+        console.log(`${member.user.tag} נכנס לשרת.`);
         const bannerUrl = config.bannerUrl;
+
+        // 1. הודעה מעוצבת בפרטי (DM)
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
@@ -78,54 +87,55 @@ async function main() {
 
         try { await member.send({ embeds: [welcomeEmbed] }); } catch (e) {}
 
+        // 2. הודעה ותמונה בערוץ בשרת
         const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
         if (welcomeChannel) {
             const imageEmbed = new EmbedBuilder().setColor('#5865F2').setImage(bannerUrl);
             await welcomeChannel.send({ embeds: [imageEmbed] }).catch(() => null);
             await welcomeChannel.send(`${member} ברוך הבא יעמה! מקווים שתהנה💜`).catch(() => null);
         }
-        updateMemberCount(member.guild, config.memberCountChannelId);
+
+        // 3. עדכון מונה משתמשים כלפי מעלה
+        updateMemberCount(member.guild, config.memberCountChannelId, config.welcomeChannelId);
     });
 
     client.on('guildMemberRemove', async (member) => {
-        updateMemberCount(member.guild, config.memberCountChannelId);
+        // עדכון מונה משתמשים כלפי מטה
+        updateMemberCount(member.guild, config.memberCountChannelId, config.welcomeChannelId);
     });
 
-    // 🛡️ מערכת ניקוי צ'אט + Auto-Mod (הגנה אוטומטית)
+    // 🧹 מערכת ניקוי צ'אט + Auto-Mod
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
         const hasAllowedRole = message.member.roles.cache.has(config.allowedClearRoleId);
 
-        // ----------------------------------------------------
-        // חלק א': Auto-Mod - פועל רק על משתמשים שאין להם את רול הניהול
-        // ----------------------------------------------------
+        // Auto-Mod (הגנה אוטומטית)
         if (!hasAllowedRole) {
             const messageContentLower = message.content.toLowerCase();
-
-            // 1. בדיקת קללות ומילים אסורות
             const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
-            
             if (containsBannedWord) {
-                await message.delete().catch(() => null); // מחיקת ההודעה המקוללת בשנייה
-                return message.channel.send(`⚠️ ${message.author}, שמור על השפה שלך! אסור לקלל בשרת הזה. ❌`).then(msg => {
-                    setTimeout(() => msg.delete().catch(() => null), 4000); // מחיקת האזהרה אחרי 4 שניות
+                await message.delete().catch(() => null);
+                return message.channel.send(`⚠️ ${message.author}, שמור על השפה שלך! אסור לקלל בשרת. ❌`).then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
             }
-
-            // 2. בדיקת קישורי הזמנה לשרתים אחרים (Anti-Invite)
             if (messageContentLower.includes('discord.gg/') || messageContentLower.includes('://discord.com')) {
-                await message.delete().catch(() => null); // מחיקת הקישור המפרסם בשנייה
+                await message.delete().catch(() => null);
                 return message.channel.send(`🚫 ${message.author}, חל איסור מוחלט לפרסם שרתי דיסקורד אחרים! ❌`).then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
             }
         }
 
-        // ----------------------------------------------------
-        // חלק ב': מערכת ניקוי צ'אט האינטראקטיבית (!clear)
-        // ----------------------------------------------------
-        if (message.content.trim() === 'ניקוי') {
+        const prefix = '!';
+        if (!message.content.startsWith(prefix)) return;
+
+        const args = message.content.slice(prefix.length).trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+
+        // פקודת ניקוי אינטראקטיבית עם שאילתת "כמה?"
+        if (command === 'ניקוי') {
             if (!hasAllowedRole) {
                 return message.reply('אין לך את הרול המתאים כדי לנהל שיחת ניקוי עם הבוט! ❌').then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 3000);
@@ -140,23 +150,18 @@ async function main() {
         if (activeClears.has(sessionKey)) {
             activeClears.delete(sessionKey);
             const amount = parseInt(message.content.trim());
-
             if (isNaN(amount) || amount < 1 || amount > 100) {
-                return message.reply('התהליך בוטל. נא לבחור מספר תקין בין 1 ל-100 בשלב הבא! 🔢').then(msg => {
+                return message.reply('התהליך בוטל. נא לבחור מספר תקין בין 1 ל-100! 🔢').then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
             }
-
             await message.channel.bulkDelete(amount + 2, true)
                 .then(deletedMessages => {
                     message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 2}** הודעות לבקשתך!`).then(msg => {
                         setTimeout(() => msg.delete().catch(() => null), 3000);
                     });
-                })
-                .catch(err => {
-                    console.error(err);
-                    message.channel.send('התרחשה שגיאה. שים לב שאי אפשר למחוק הודעות ישנות משבועיים! ❌');
-                });
+                }).catch(() => null);
+            return;
         }
     });
 
