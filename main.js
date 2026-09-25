@@ -3,16 +3,21 @@ const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
 
-// 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
+// 🌍 שרת אינטרנט לשמירה על הבוט פעיל במארחים חיצוניים
 http.createServer((req, res) => {
     res.write("SFS Safe Multi-Bot is running!");
     res.end();
 }).listen(process.env.PORT || 3000);
 
 async function loadConfig() {
-    const configPath = path.join(__dirname, 'config.json');
-    const configData = await fs.readFile(configPath, 'utf-8');
-    return JSON.parse(configData);
+    try {
+        const configPath = path.join(__dirname, 'config.json');
+        const configData = await fs.readFile(configPath, 'utf-8');
+        return JSON.parse(configData);
+    } catch (error) {
+        console.error("שגיאה בטעינת config.json:", error.message);
+        return {};
+    }
 }
 
 async function updateMemberCount(guild, channelId) {
@@ -28,7 +33,7 @@ async function updateMemberCount(guild, channelId) {
     }
 }
 
-// 🤬 רשימת קללות ומילים אסורות (תוכל להוסיף או לשנות כאן מילים בתוך הגרשיים)
+// 🤬 רשימת קללות ומילים אסורות
 const bannedWords = [
     'שרמוטה', 'זונה', 'מניאק', 'קוקסינל', 'הומו', 'נאצי', 'כוסאמאק', 'זין', 'שרמוט', 'בן זונה',
     'fuck', 'bitch', 'asshole', 'nigger', 'nigga', 'whore', 'slut'
@@ -38,7 +43,13 @@ const activeClears = new Map();
 
 async function main() {
     const config = await loadConfig();
-    const botToken = config.token === "PROCESS_ENV_TOKEN" ? process.env.DISCORD_TOKEN : config.token;
+    // קריאת הטוקן בבטחה ממשתני הסביבה (TOKEN / DISCORD_TOKEN) או מקובץ ה-config
+    const botToken = process.env.TOKEN || process.env.DISCORD_TOKEN || config.token;
+
+    if (!botToken) {
+        console.error("❌ לא נמצא טוקן! יש להגדיר TOKEN במשתני הסביבה (Environment Variables) במארח.");
+        return;
+    }
 
     const client = new Client({
         intents: [
@@ -107,15 +118,15 @@ async function main() {
             const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
             
             if (containsBannedWord) {
-                await message.delete().catch(() => null); // מחיקת ההודעה המקוללת בשנייה
+                await message.delete().catch(() => null);
                 return message.channel.send(`⚠️ ${message.author}, שמור על השפה שלך! אסור לקלל בשרת הזה. ❌`).then(msg => {
-                    setTimeout(() => msg.delete().catch(() => null), 4000); // מחיקת האזהרה אחרי 4 שניות
+                    setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
             }
 
             // 2. בדיקת קישורי הזמנה לשרתים אחרים (Anti-Invite)
             if (messageContentLower.includes('discord.gg/') || messageContentLower.includes('://discord.com')) {
-                await message.delete().catch(() => null); // מחיקת הקישור המפרסם בשנייה
+                await message.delete().catch(() => null);
                 return message.channel.send(`🚫 ${message.author}, חל איסור מוחלט לפרסם שרתי דיסקורד אחרים! ❌`).then(msg => {
                     setTimeout(() => msg.delete().catch(() => null), 4000);
                 });
@@ -147,9 +158,13 @@ async function main() {
                 });
             }
 
-            await message.channel.bulkDelete(amount + 2, true)
+            // הגבלה של מקסימום 100 הודעות (מגבלת דיסקורד)
+            const deleteCount = Math.min(amount + 2, 100);
+
+            await message.channel.bulkDelete(deleteCount, true)
                 .then(deletedMessages => {
-                    message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 2}** הודעות לבקשתך!`).then(msg => {
+                    const actualDeleted = Math.max(deletedMessages.size - 2, 0);
+                    message.channel.send(`🧹 ניקיתי בהצלחה **${actualDeleted}** הודעות לבקשתך!`).then(msg => {
                         setTimeout(() => msg.delete().catch(() => null), 3000);
                     });
                 })
