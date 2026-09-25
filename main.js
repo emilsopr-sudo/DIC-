@@ -1,139 +1,73 @@
-import os
-import re
-import asyncio
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+const {
+    Client,
+    GatewayIntentBits,
+    EmbedBuilder,
+    PermissionsBitField
+} = require('discord.js');
 
-import discord
-from discord.ext import commands
-from dotenv import load_dotenv
+const http = require('http');
 
+// ============================================================
+// 🔐 ENV
+// ============================================================
 
-# ============================================================
-# SFS BOT - ALL IN ONE
-# ============================================================
+const BOT_TOKEN = process.env.DISCORD_TOKEN;
+const BANNER_URL = process.env.BANNER_URL || "";
 
-load_dotenv()
+// ============================================================
+// 🆔 SFS CHANNELS / ROLE
+// ============================================================
 
+const WELCOME_CHANNEL_ID = "1552769580856909938";
+const MEMBER_COUNT_CHANNEL_ID = "1552806717308543046";
+const RULES_CHANNEL_ID = "1552769582278648009";
+const GENERAL_CHANNEL_ID = "1552769587408543927";
 
-# ============================================================
-# 🔧 הגדרות שרת
-# ============================================================
+const ALLOWED_CLEAR_ROLE_ID = "1552769521885118494";
 
-WELCOME_CHANNEL_ID = 1552769580856909938
-MEMBER_COUNT_CHANNEL_ID = 1552806717308543046
-RULES_CHANNEL_ID = 1552769582278648009
-GENERAL_CHANNEL_ID = 1552769587408543927
+// ============================================================
+// 🌐 RENDER WEB SERVER
+// ============================================================
 
-# 👑 מי שמחזיק ברול הזה יכול להשתמש ב"ניקוי"
-ALLOWED_CLEAR_ROLE_ID = 1552769521885118494
+const PORT = process.env.PORT || 3000;
 
+http.createServer((req, res) => {
+    res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8"
+    });
 
-# ============================================================
-# 🔐 Token
-# ============================================================
-# שים את הטוקן שלך ב-Render Environment Variables:
-# DISCORD_TOKEN=YOUR_TOKEN
-#
-# אל תשים את הטוקן בתוך הקוד ואל תעלה אותו ל-GitHub.
+    res.end("SFS Safe Multi-Bot is running!");
+}).listen(PORT, "0.0.0.0", () => {
+    console.log(`🌐 Web server running on port ${PORT}`);
+});
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+// ============================================================
+// ❌ TOKEN CHECK
+// ============================================================
 
-if not TOKEN:
-    raise RuntimeError(
-        "❌ לא נמצא DISCORD_TOKEN!\n"
-        "שים את הטוקן שלך ב-Render תחת Environment Variables."
-    )
+if (!BOT_TOKEN) {
+    console.error("❌ DISCORD_TOKEN לא נמצא ב-Environment Variables.");
+    process.exit(1);
+}
 
+// ============================================================
+// 🤖 CLIENT
+// ============================================================
 
-# ============================================================
-# 🖼️ BANNER
-# ============================================================
-# שים ב-Render Environment Variables:
-# BANNER_URL=https://....
-#
-# או החלף ישירות כאן בקישור שלך.
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
 
-BANNER_URL = os.getenv(
-    "BANNER_URL",
-    ""
-)
+// ============================================================
+// 🤬 BANNED WORDS
+// ============================================================
 
-
-# ============================================================
-# 🌐 WEB SERVER - Render
-# ============================================================
-
-class KeepAliveHandler(BaseHTTPRequestHandler):
-
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header(
-            "Content-Type",
-            "text/plain; charset=utf-8"
-        )
-        self.end_headers()
-
-        self.wfile.write(
-            b"SFS Safe Multi-Bot is running!"
-        )
-
-    def log_message(self, format, *args):
-        return
-
-
-def start_web_server():
-
-    port = int(
-        os.getenv("PORT", "3000")
-    )
-
-    server = HTTPServer(
-        ("0.0.0.0", port),
-        KeepAliveHandler
-    )
-
-    print(
-        f"🌐 Web server running on port {port}"
-    )
-
-    server.serve_forever()
-
-
-threading.Thread(
-    target=start_web_server,
-    daemon=True
-).start()
-
-
-# ============================================================
-# 🤖 DISCORD INTENTS
-# ============================================================
-
-intents = discord.Intents.default()
-
-intents.guilds = True
-intents.members = True
-intents.guild_messages = True
-intents.message_content = True
-
-
-# ============================================================
-# 🤖 BOT
-# ============================================================
-
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents,
-    help_command=None
-)
-
-
-# ============================================================
-# 🤬 מילים אסורות
-# ============================================================
-
-BANNED_WORDS = [
+const bannedWords = [
     "שרמוטה",
     "זונה",
     "מניאק",
@@ -151,731 +85,507 @@ BANNED_WORDS = [
     "nigga",
     "whore",
     "slut"
-]
+];
 
+const escapeRegex = (text) =>
+    text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-def escape_regex(text: str) -> str:
-    return re.escape(text)
+const bannedWordsRegex = new RegExp(
+    "(^|[^א-תa-zA-Z0-9])(" +
+        bannedWords.map(escapeRegex).join("|") +
+        ")($|[^א-תa-zA-Z0-9])",
+    "i"
+);
 
+// ============================================================
+// 🧹 CLEAR SESSIONS
+// ============================================================
 
-BANNED_REGEX = re.compile(
-    r"(^|[^א-תa-zA-Z0-9])("
-    + "|".join(
-        escape_regex(word)
-        for word in BANNED_WORDS
-    )
-    + r")($|[^א-תa-zA-Z0-9])",
-    re.IGNORECASE
-)
+const activeClears = new Map();
 
+const CLEAR_SESSION_TIMEOUT_MS = 60 * 1000;
 
-# ============================================================
-# 🧹 SESSIONS של ניקוי
-# ============================================================
+function getSessionKey(userId, channelId) {
+    return `${userId}-${channelId}`;
+}
 
-active_clears = {}
+function startClearSession(sessionKey) {
+    const oldTimer = activeClears.get(sessionKey);
 
-CLEAR_TIMEOUT = 60
+    if (oldTimer) {
+        clearTimeout(oldTimer);
+    }
 
+    const timer = setTimeout(() => {
+        activeClears.delete(sessionKey);
+    }, CLEAR_SESSION_TIMEOUT_MS);
 
-def make_session_key(user_id: int, channel_id: int) -> str:
-    return f"{user_id}:{channel_id}"
+    activeClears.set(sessionKey, timer);
+}
 
+function endClearSession(sessionKey) {
+    const timer = activeClears.get(sessionKey);
 
-async def clear_session_timeout(key: str):
+    if (timer) {
+        clearTimeout(timer);
+    }
 
-    try:
-        await asyncio.sleep(CLEAR_TIMEOUT)
+    activeClears.delete(sessionKey);
+}
 
-    except asyncio.CancelledError:
-        return
+// ============================================================
+// 👑 CLEAR PERMISSION
+// ============================================================
 
-    active_clears.pop(key, None)
+function canUseClear(member) {
+    if (!member) return false;
 
-
-def start_clear_session(key: str):
-
-    old_task = active_clears.get(key)
-
-    if old_task:
-        old_task.cancel()
-
-    active_clears[key] = asyncio.create_task(
-        clear_session_timeout(key)
-    )
-
-
-def end_clear_session(key: str):
-
-    task = active_clears.get(key)
-
-    if task:
-        task.cancel()
-
-    active_clears.pop(key, None)
-
-
-# ============================================================
-# 🎖️ בדיקת הרשאת ניקוי
-# ============================================================
-
-def has_clear_permission(member: discord.Member) -> bool:
-
-    if not isinstance(member, discord.Member):
-        return False
-
-    # מנהלים עם Manage Messages יכולים גם
-    if member.guild_permissions.manage_messages:
-        return True
-
-    return any(
-        role.id == ALLOWED_CLEAR_ROLE_ID
-        for role in member.roles
-    )
-
-
-# ============================================================
-# 👥 עדכון מונה חברים
-# ============================================================
-
-async def update_member_count(guild: discord.Guild):
-
-    try:
-
-        channel = guild.get_channel(
-            MEMBER_COUNT_CHANNEL_ID
+    if (
+        member.permissions.has(
+            PermissionsBitField.Flags.ManageMessages
         )
+    ) {
+        return true;
+    }
 
-        if not channel:
-            print(
-                "⚠️ ערוץ מונה החברים לא נמצא."
-            )
-            return
+    return member.roles.cache.has(
+        ALLOWED_CLEAR_ROLE_ID
+    );
+}
 
-        await channel.edit(
-            name=f"👥 חברים בשרת: {guild.member_count}"
+// ============================================================
+// 👥 MEMBER COUNT
+// ============================================================
+
+async function updateMemberCount(guild) {
+    try {
+        const channel = await guild.channels
+            .fetch(MEMBER_COUNT_CHANNEL_ID)
+            .catch(() => null);
+
+        if (!channel) {
+            console.log(
+                `⚠️ Member count channel not found in ${guild.name}`
+            );
+            return;
+        }
+
+        if (!channel.manageable) {
+            console.log(
+                `❌ Cannot rename member count channel in ${guild.name}`
+            );
+            return;
+        }
+
+        await channel.setName(
+            `👥 חברים בשרת: ${guild.memberCount}`
+        );
+
+    } catch (error) {
+        console.error(
+            "❌ שגיאה בעדכון מונה:",
+            error.message
+        );
+    }
+}
+
+// ============================================================
+// ✅ READY
+// ============================================================
+
+client.once("ready", async () => {
+    console.log("");
+    console.log("==================================================");
+    console.log("🔥 SFS BOT ONLINE");
+    console.log("==================================================");
+    console.log(`🤖 Bot: ${client.user.tag}`);
+    console.log(`🆔 ID: ${client.user.id}`);
+    console.log(`🏠 Servers: ${client.guilds.cache.size}`);
+    console.log("🛡️ Auto-Mod: ON");
+    console.log("🚫 Anti-Invite: ON");
+    console.log("🧹 Clear: ON");
+    console.log("🎈 Welcome: ON");
+    console.log("👥 Member Counter: ON");
+    console.log("==================================================");
+    console.log("");
+
+    for (const guild of client.guilds.cache.values()) {
+        await updateMemberCount(guild);
+    }
+});
+
+// ============================================================
+// 🎈 WELCOME
+// ============================================================
+
+client.on("guildMemberAdd", async (member) => {
+    const welcomeEmbed = new EmbedBuilder()
+        .setColor("#5865F2")
+        .setTitle("🇮🇱 ברוכים הבאים ל-SFS 🇮🇱")
+        .setDescription(
+            `👋 אהלן ${member} וברוך הבא לשרת הרשמי של **SFS**!\n\n` +
+            `תפסו כיסא בפרלמנט, תכינו קפה ותתחילו להכיר אנשים.\n` +
+            `כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n` +
+            `**לפני שאתה קופץ למים, תעשה סיבוב קצר:**\n\n` +
+            `📜 ספר החוקים — <#${RULES_CHANNEL_ID}>\n` +
+            `💬 צ'אט ראשי — <#${GENERAL_CHANNEL_ID}>\n\n` +
+            `יאללה, בלי להתבייש. תהנו! 💜`
         )
-
-        print(
-            f"👥 מונה עודכן: {guild.member_count}"
+        .setThumbnail(
+            member.user.displayAvatarURL({
+                extension: "png",
+                size: 256
+            })
         )
+        .setTimestamp();
+
+    if (BANNER_URL) {
+        welcomeEmbed.setImage(BANNER_URL);
+    }
+
+    // --------------------------------------------------------
+    // 📩 DM
+    // --------------------------------------------------------
+
+    try {
+        await member.send({
+            embeds: [welcomeEmbed]
+        });
+    } catch (error) {
+        // DM חסום / נכשל - לא מפיל את הבוט
+    }
+
+    // --------------------------------------------------------
+    // 📢 Welcome Channel
+    // --------------------------------------------------------
+
+    try {
+        const welcomeChannel = await member.guild.channels
+            .fetch(WELCOME_CHANNEL_ID)
+            .catch(() => null);
+
+        if (welcomeChannel) {
+            await welcomeChannel.send({
+                embeds: [welcomeEmbed]
+            });
+
+            const welcomeMessage = await welcomeChannel.send(
+                `${member} ברוך הבא יעמה! מקווים שתהנה 💜`
+            );
+
+            setTimeout(() => {
+                welcomeMessage.delete().catch(() => {});
+            }, 8000);
+        }
+    } catch (error) {
+        console.error(
+            "❌ Welcome error:",
+            error.message
+        );
+    }
+
+    await updateMemberCount(member.guild);
+});
+
+// ============================================================
+// 🚪 MEMBER LEAVE
+// ============================================================
+
+client.on("guildMemberRemove", async (member) => {
+    await updateMemberCount(member.guild);
+});
+
+// ============================================================
+// 🛡️ MESSAGE CREATE
+// ============================================================
+
+client.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+    if (!message.guild) return;
+
+    const hasClearPermission = canUseClear(
+        message.member
+    );
+
+    // ========================================================
+    // 🤬 AUTO-MOD
+    // ========================================================
+
+    if (!hasClearPermission) {
+        const content = message.content.toLowerCase();
+
+        // ----------------------------------------------------
+        // קללות
+        // ----------------------------------------------------
+
+        if (bannedWordsRegex.test(content)) {
+            await message.delete().catch(() => {});
+
+            try {
+                const warning = await message.channel.send(
+                    `⚠️ ${message.author}, שמור על השפה שלך! ` +
+                    `אסור לקלל בשרת הזה. ❌`
+                );
+
+                setTimeout(() => {
+                    warning.delete().catch(() => {});
+                }, 4000);
+            } catch (error) {}
+
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 🚫 DISCORD INVITES
+        // ----------------------------------------------------
 
-    except discord.Forbidden:
+        const inviteRegex =
+            /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i;
 
-        print(
-            "❌ אין לבוט הרשאה לשנות את שם ערוץ המונה."
-        )
+        if (inviteRegex.test(content)) {
+            await message.delete().catch(() => {});
 
-    except discord.HTTPException as error:
+            try {
+                const warning = await message.channel.send(
+                    `🚫 ${message.author}, חל איסור מוחלט ` +
+                    `לפרסם שרתי דיסקורד אחרים! ❌`
+                );
 
-        print(
-            f"❌ שגיאה בעדכון מונה: {error}"
-        )
+                setTimeout(() => {
+                    warning.delete().catch(() => {});
+                }, 4000);
+            } catch (error) {}
 
+            return;
+        }
+    }
 
-# ============================================================
-# ✅ READY
-# ============================================================
+    // ========================================================
+    // 🧹 ניקוי
+    // ========================================================
 
-@bot.event
-async def on_ready():
-
-    print()
-    print("=" * 60)
-    print("🔥 SFS BOT ONLINE")
-    print("=" * 60)
-    print(f"🤖 Bot: {bot.user}")
-    print(f"🆔 Bot ID: {bot.user.id}")
-    print(f"🏠 Servers: {len(bot.guilds)}")
-    print("🛡️ Auto-Mod: ON")
-    print("🚫 Anti-Invite: ON")
-    print("🧹 Clear: ON")
-    print("🎈 Welcome: ON")
-    print("👥 Member Counter: ON")
-    print("=" * 60)
-    print()
-
-    for guild in bot.guilds:
-        await update_member_count(guild)
-
-
-# ============================================================
-# 🎈 MEMBER JOIN
-# ============================================================
-
-@bot.event
-async def on_member_join(member: discord.Member):
-
-    welcome_embed = discord.Embed(
-        title="🇮🇱 ברוכים הבאים ל-SFS 🇮🇱",
-        description=(
-            f"👋 אהלן {member.mention} וברוך הבא "
-            f"לשרת הרשמי של **SFS**!\n\n"
-
-            f"תפסו כיסא בפרלמנט, תכינו קפה "
-            f"ותתחילו להכיר אנשים.\n"
-            f"כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n"
-
-            f"**לפני שאתה קופץ למים, "
-            f"תעשה סיבוב קצר:**\n\n"
-
-            f"📜 ספר החוקים — "
-            f"<#{RULES_CHANNEL_ID}>\n"
-
-            f"💬 צ'אט ראשי — "
-            f"<#{GENERAL_CHANNEL_ID}>\n\n"
-
-            f"יאללה, בלי להתבייש.\n"
-            f"תהנו! 💜"
-        ),
-        color=discord.Color.from_rgb(
-            88,
-            101,
-            242
-        )
-    )
-
-    welcome_embed.set_thumbnail(
-        url=member.display_avatar.url
-    )
-
-    if BANNER_URL:
-        welcome_embed.set_image(
-            url=BANNER_URL
-        )
-
-    welcome_embed.timestamp = discord.utils.utcnow()
-
-    # --------------------------------------------------------
-    # 📩 DM
-    # --------------------------------------------------------
-
-    try:
-
-        await member.send(
-            embed=welcome_embed
-        )
-
-    except (
-        discord.Forbidden,
-        discord.HTTPException
-    ):
-
-        pass
-
-    # --------------------------------------------------------
-    # 📢 Welcome Channel
-    # --------------------------------------------------------
-
-    try:
-
-        channel = member.guild.get_channel(
-            WELCOME_CHANNEL_ID
-        )
-
-        if channel:
-
-            if BANNER_URL:
-
-                banner_embed = discord.Embed(
-                    color=discord.Color.from_rgb(
-                        88,
-                        101,
-                        242
-                    )
-                )
-
-                banner_embed.set_image(
-                    url=BANNER_URL
-                )
-
-                await channel.send(
-                    embed=banner_embed
-                )
-
-            await channel.send(
-                f"{member.mention} "
-                f"ברוך הבא יעמה! "
-                f"מקווים שתהנה 💜"
-            )
-
-    except (
-        discord.Forbidden,
-        discord.HTTPException
-    ):
-
-        pass
-
-    # --------------------------------------------------------
-    # 👥 Counter
-    # --------------------------------------------------------
-
-    await update_member_count(
-        member.guild
-    )
-
-
-# ============================================================
-# 🚪 MEMBER LEAVE
-# ============================================================
-
-@bot.event
-async def on_member_remove(member: discord.Member):
-
-    await update_member_count(
-        member.guild
-    )
-
-
-# ============================================================
-# 🛡️ AUTO MOD
-# ============================================================
-
-async def run_auto_moderation(message: discord.Message):
-
-    member = message.author
-
-    # רול מנהלים / Manage Messages פטור מהפילטר
-    if has_clear_permission(member):
-        return False
-
-    content = message.content.lower()
-
-    # --------------------------------------------------------
-    # 🤬 קללות
-    # --------------------------------------------------------
-
-    if BANNED_REGEX.search(content):
-
-        try:
-            await message.delete()
-        except discord.HTTPException:
-            pass
-
-        try:
-
-            warning = await message.channel.send(
-                f"⚠️ {member.mention}, "
-                f"שמור על השפה שלך! "
-                f"אסור לקלל בשרת הזה. ❌"
-            )
-
-            await asyncio.sleep(4)
-
-            try:
-                await warning.delete()
-            except discord.HTTPException:
-                pass
-
-        except discord.HTTPException:
-            pass
-
-        return True
-
-    # --------------------------------------------------------
-    # 🚫 INVITES
-    # --------------------------------------------------------
-
-    invite_patterns = [
-        r"discord\.gg/",
-        r"discord\.com/invite/",
-        r"discordapp\.com/invite/"
-    ]
-
-    if any(
-        re.search(
-            pattern,
-            content,
-            re.IGNORECASE
-        )
-        for pattern in invite_patterns
-    ):
-
-        try:
-            await message.delete()
-        except discord.HTTPException:
-            pass
-
-        try:
-
-            warning = await message.channel.send(
-                f"🚫 {member.mention}, "
-                f"חל איסור מוחלט לפרסם "
-                f"שרתי דיסקורד אחרים! ❌"
-            )
-
-            await asyncio.sleep(4)
-
-            try:
-                await warning.delete()
-            except discord.HTTPException:
-                pass
-
-        except discord.HTTPException:
-            pass
-
-        return True
-
-    return False
-
-
-# ============================================================
-# 🧹 ניקוי
-# ============================================================
-
-async def start_clear(message: discord.Message):
-
-    if not has_clear_permission(
-        message.author
-    ):
-
-        try:
-
-            warning = await message.reply(
-                "אין לך הרשאה להשתמש במערכת הניקוי! ❌"
-            )
-
-            await asyncio.sleep(3)
-
-            try:
-                await warning.delete()
-            except discord.HTTPException:
-                pass
-
-            try:
-                await message.delete()
-            except discord.HTTPException:
-                pass
-
-        except discord.HTTPException:
-            pass
-
-        return
-
-    key = make_session_key(
+    const sessionKey = getSessionKey(
         message.author.id,
         message.channel.id
-    )
+    );
 
-    start_clear_session(key)
+    // --------------------------------------------------------
+    // מישהו כתב "ניקוי"
+    // --------------------------------------------------------
 
-    await message.reply(
-        "כמה? 🤔\n"
-        "יש לך **דקה** לענות.\n"
-        "כתוב מספר בין **1 ל-100**."
-    )
+    if (message.content.trim() === "ניקוי") {
+        if (!hasClearPermission) {
+            try {
+                const reply = await message.reply(
+                    "אין לך הרשאה להשתמש במערכת הניקוי! ❌"
+                );
 
+                setTimeout(() => {
+                    reply.delete().catch(() => {});
+                    message.delete().catch(() => {});
+                }, 3000);
+            } catch (error) {}
 
-# ============================================================
-# 🔢 מספר ניקוי
-# ============================================================
+            return;
+        }
 
-async def process_clear_number(message: discord.Message):
+        startClearSession(sessionKey);
 
-    key = make_session_key(
-        message.author.id,
-        message.channel.id
-    )
+        await message.reply(
+            "כמה? 🤔\n" +
+            "יש לך **דקה** לענות.\n" +
+            "כתוב מספר בין **1 ל-100**."
+        );
 
-    if key not in active_clears:
-        return False
+        return;
+    }
 
-    try:
+    // --------------------------------------------------------
+    // יש session פעיל
+    // --------------------------------------------------------
 
-        amount = int(
-            message.content.strip()
-        )
+    if (activeClears.has(sessionKey)) {
+        const text = message.content.trim();
 
-    except ValueError:
+        // אם זה לא מספר - ממשיכים לחכות
+        if (!/^\d+$/.test(text)) {
+            return;
+        }
 
-        # אם זה לא מספר, מחכים להודעה הבאה
-        return False
+        const amount = parseInt(text, 10);
 
-    end_clear_session(key)
+        endClearSession(sessionKey);
 
-    # --------------------------------------------------------
-    # בדיקת טווח
-    # --------------------------------------------------------
+        // ----------------------------------------------------
+        // בדיקת מספר
+        // ----------------------------------------------------
 
-    if amount < 1 or amount > 100:
+        if (amount < 1 || amount > 100) {
+            try {
+                const reply = await message.reply(
+                    "❌ התהליך בוטל.\n" +
+                    "בחר מספר בין **1 ל-100**."
+                );
 
-        try:
+                setTimeout(() => {
+                    reply.delete().catch(() => {});
+                }, 4000);
+            } catch (error) {}
 
-            warning = await message.reply(
-                "❌ התהליך בוטל.\n"
-                "צריך לבחור מספר בין **1 ל-100**."
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 🧹 מחיקה
+        // ----------------------------------------------------
+
+        try {
+            const deletedMessages =
+                await message.channel.bulkDelete(
+                    amount,
+                    true
+                );
+
+            const deletedCount =
+                deletedMessages.size;
+
+            const result =
+                await message.channel.send(
+                    `🧹 ניקיתי בהצלחה **${deletedCount}** הודעות!`
+                );
+
+            setTimeout(() => {
+                result.delete().catch(() => {});
+            }, 3000);
+
+        } catch (error) {
+            console.error(
+                "❌ Clear error:",
+                error.message
+            );
+
+            try {
+                await message.channel.send(
+                    "❌ לא הצלחתי לבצע את הניקוי. " +
+                    "בדוק שיש לי הרשאת **Manage Messages** " +
+                    "ושההודעות לא ישנות מדי."
+                );
+            } catch (sendError) {}
+        }
+
+        return;
+    }
+});
+
+// ============================================================
+// 🏓 PING
+// ============================================================
+
+client.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+    if (!message.guild) return;
+
+    if (message.content === "!ping") {
+        const ping = Math.round(
+            client.ws.ping
+        );
+
+        await message.reply(
+            `🏓 **Pong!** \`${ping}ms\``
+        );
+    }
+});
+
+// ============================================================
+// 🏠 SERVER INFO
+// ============================================================
+
+client.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+    if (!message.guild) return;
+
+    if (message.content === "!server") {
+        const guild = message.guild;
+
+        const embed = new EmbedBuilder()
+            .setColor("#5865F2")
+            .setTitle(`🇮🇱 ${guild.name}`)
+            .addFields(
+                {
+                    name: "👥 חברים",
+                    value: `${guild.memberCount}`,
+                    inline: true
+                },
+                {
+                    name: "💬 ערוצים",
+                    value: `${guild.channels.cache.size}`,
+                    inline: true
+                },
+                {
+                    name: "🆔 Server ID",
+                    value: `${guild.id}`,
+                    inline: false
+                }
             )
-
-            await asyncio.sleep(4)
-
-            try:
-                await warning.delete()
-            except discord.HTTPException:
-                pass
-
-        except discord.HTTPException:
-            pass
-
-        return True
-
-    # --------------------------------------------------------
-    # ניקוי
-    # --------------------------------------------------------
-
-    try:
-
-        deleted = await message.channel.purge(
-            limit=amount + 1,
-            bulk=True
-        )
-
-        deleted_count = len(deleted)
-
-        success = await message.channel.send(
-            f"🧹 ניקיתי בהצלחה "
-            f"**{deleted_count}** "
-            f"הודעות!"
-        )
-
-        await asyncio.sleep(3)
-
-        try:
-            await success.delete()
-        except discord.HTTPException:
-            pass
-
-    except discord.Forbidden:
-
-        await message.channel.send(
-            "❌ אין לי הרשאה למחוק הודעות."
-        )
-
-    except discord.HTTPException as error:
-
-        print(
-            f"❌ Clear error: {error}"
-        )
-
-        try:
-
-            await message.channel.send(
-                "❌ לא הצלחתי לבצע את הניקוי.\n"
-                "יכול להיות שיש הודעות ישנות מדי."
-            )
-
-        except discord.HTTPException:
-            pass
-
-    return True
-
-
-# ============================================================
-# 💬 MESSAGE CREATE
-# ============================================================
-
-@bot.event
-async def on_message(message: discord.Message):
-
-    if message.author.bot:
-        return
-
-    if not message.guild:
-        return
-
-    # --------------------------------------------------------
-    # 🛡️ Auto Mod
-    # --------------------------------------------------------
-
-    blocked = await run_auto_moderation(
-        message
-    )
-
-    if blocked:
-        return
-
-    # --------------------------------------------------------
-    # 🧹 בדיקת ניקוי פעיל
-    # --------------------------------------------------------
-
-    clear_handled = await process_clear_number(
-        message
-    )
-
-    if clear_handled:
-        return
-
-    # --------------------------------------------------------
-    # 🧹 "ניקוי"
-    # --------------------------------------------------------
-
-    if message.content.strip() == "ניקוי":
-
-        await start_clear(
-            message
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # פקודות
-    # --------------------------------------------------------
-
-    await bot.process_commands(
-        message
-    )
-
-
-# ============================================================
-# 🏓 PING
-# ============================================================
-
-@bot.command()
-async def ping(ctx):
-
-    latency = round(
-        bot.latency * 1000
-    )
-
-    await ctx.send(
-        f"🏓 **Pong!** `{latency}ms`"
-    )
-
-
-# ============================================================
-# 🏠 SERVER INFO
-# ============================================================
-
-@bot.command()
-async def server(ctx):
-
-    guild = ctx.guild
-
-    embed = discord.Embed(
-        title=f"🇮🇱 {guild.name}",
-        color=discord.Color.from_rgb(
-            88,
-            101,
-            242
-        )
-    )
-
-    embed.add_field(
-        name="👥 חברים",
-        value=str(
-            guild.member_count
-        )
-    )
-
-    embed.add_field(
-        name="💬 ערוצים",
-        value=str(
-            len(guild.channels)
-        )
-    )
-
-    embed.add_field(
-        name="🆔 Server ID",
-        value=str(
-            guild.id
-        ),
-        inline=False
-    )
-
-    if guild.icon:
-
-        embed.set_thumbnail(
-            url=guild.icon.url
-        )
-
-    await ctx.send(
-        embed=embed
-    )
-
-
-# ============================================================
-# 📖 HELP
-# ============================================================
-
-@bot.command()
-async def helpme(ctx):
-
-    embed = discord.Embed(
-        title="🤖 SFS Bot",
-        description=(
-            "**מערכות פעילות:**\n\n"
-
-            "🧹 `ניקוי` — ניקוי הודעות\n"
-            "🏓 `!ping` — בדיקת פינג\n"
-            "🏠 `!server` — מידע על השרת\n\n"
-
-            "🛡️ Auto-Mod פעיל\n"
-            "🚫 Anti-Invite פעיל\n"
-            "🎈 Welcome פעיל\n"
-            "👥 Member Counter פעיל"
-        ),
-        color=discord.Color.from_rgb(
-            88,
-            101,
-            242
-        )
-    )
-
-    await ctx.send(
-        embed=embed
-    )
-
-
-# ============================================================
-# ❌ COMMAND ERRORS
-# ============================================================
-
-@bot.event
-async def on_command_error(
-    ctx,
-    error
-):
-
-    if isinstance(
-        error,
-        commands.CommandNotFound
-    ):
-        return
-
-    print(
-        f"❌ Command error: {error}"
-    )
-
-
-# ============================================================
-# 🚀 START
-# ============================================================
-
-async def main():
-
-    async with bot:
-
-        await bot.start(
-            TOKEN
-        )
-
-
-if __name__ == "__main__":
-
-    try:
-
-        asyncio.run(
-            main()
-        )
-
-    except KeyboardInterrupt:
-
-        print(
-            "🛑 SFS Bot stopped."
-        )
-
-    except Exception as error:
-
-        print(
-            f"🔥 Fatal error: {error}"
-        )
-        )
+            .setTimestamp();
+
+        if (guild.iconURL()) {
+            embed.setThumbnail(
+                guild.iconURL({
+                    extension: "png",
+                    size: 256
+                })
+            );
+        }
+
+        await message.reply({
+            embeds: [embed]
+        });
+    }
+});
+
+// ============================================================
+// 📖 HELP
+// ============================================================
+
+client.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+    if (!message.guild) return;
+
+    if (message.content === "!help") {
+        const embed = new EmbedBuilder()
+            .setColor("#5865F2")
+            .setTitle("🤖 SFS Bot")
+            .setDescription(
+                "**מערכות פעילות:**\n\n" +
+                "🧹 `ניקוי` — ניקוי הודעות\n" +
+                "🏓 `!ping` — בדיקת פינג\n" +
+                "🏠 `!server` — מידע על השרת\n\n" +
+                "🛡️ Auto-Mod פעיל\n" +
+                "🚫 Anti-Invite פעיל\n" +
+                "🎈 Welcome פעיל\n" +
+                "👥 Member Counter פעיל"
+            );
+
+        await message.reply({
+            embeds: [embed]
+        });
+    }
+});
+
+// ============================================================
+// ❌ DISCORD ERROR
+// ============================================================
+
+client.on("error", (error) => {
+    console.error(
+        "❌ Discord client error:",
+        error
+    );
+});
+
+// ============================================================
+// 🚀 LOGIN
+// ============================================================
+
+client.login(BOT_TOKEN);
