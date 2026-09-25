@@ -1,7 +1,7 @@
 {
-  "token": "PROCESS_ENV_TOKEN",
-  "newServerName": "SFS SERVER ♛",
-  "welcomeChannelId": "1552769580856909938",
-  "memberCountChannelId": "1552769580856910000",
-  "allowedClearRoleId": "1552769521885118494"
+    "welcomeChannelId": "1552769580856909938",
+    "memberCountChannelId": "1552806717308543046",
+    "rulesChannelId": "1552769582278648009",
+    "generalChannelId": "1552769587408543927",
+    "allowedClearRoleId": "1552769521885118494"
 }
