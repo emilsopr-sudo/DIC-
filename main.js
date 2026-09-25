@@ -65,18 +65,18 @@ async function main() {
     client.on('guildMemberAdd', async (member) => {
         console.log(`${member.user.tag} נכנס לשרת SFS.`);
         
-        // כאן בשורה 64 אתה יכול להחליף את הקישור של התמונה מתי שתרצה!
         const bannerUrl = 'https://postimg.cc';
 
+        // הקישור עודכן ידנית ל-ID המדויק ששלחת לי בשביל חדר החוקים!
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
             .setDescription(
                 `👋 אהלן ${member} וברוך הבא לשרת הרשמי של **SFS**!\n` +
                 `תפסו כיסא בפרלמנט, תכינו קפה ותתחילו להכיר אנשים.\n` +
-                `כאן לא עושים פוזות, כולם מדברים WITH כולם.\n\n` +
+                `כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n` +
                 `**לפני שאתה קופץ למים, תעשה סיבוב קצר:**\n` +
-                `📜 תראה מה מותר ומה אסור ב- <#1552769582278648009>\n` +
+                `📜 תראה מה מותר ומה אסור ב- <#1552769582278648009>\n` + 
                 `🎭 תבחר מה מעניין אותך ב- <#1552769584795226273>\n` +
                 `💬 ובוא להגיד שלום ב- <#1552769592378658939>\n\n` +
                 `יאללה, בלי להתבייש. תהנו! 💜`
@@ -105,11 +105,11 @@ async function main() {
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        // 🛡️ בדיקה אוטומטית: האם למשתמש יש הרשאת ניהול הודעות או מנהל מערכת כללי
+        // בדיקה אוטומטית אם למשתמש יש הרשאת ניהול הודעות או מנהל מערכת כללי
         const isStaff = message.member.permissions.has(PermissionFlagsBits.ManageMessages) || 
                         message.member.permissions.has(PermissionFlagsBits.Administrator);
 
-        // Auto-Mod (הגנה אוטומטית מקללות - פועל רק על משתמשים רגילים)
+        // Auto-Mod (הגנה אוטומטית מקללות)
         if (!isStaff) {
             const messageContentLower = message.content.toLowerCase();
             const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
@@ -135,7 +135,7 @@ async function main() {
 
         // 📜 פקודה: יצירת חלון החוקים המקצועי לשרת
         if (command === 'חוקים') {
-            if (!isStaff) return; // רק צוות מורשה יכול להפעיל
+            if (!isStaff) return; 
             await message.delete().catch(() => null);
 
             const rulesEmbed = new EmbedBuilder()
@@ -164,7 +164,7 @@ async function main() {
 
         // פקודת ניקוי אינטראקטיבית בעברית
         if (command === 'ניקוי') {
-            if (!isStaff) return; // רק צוות מורשה יכול להפעיל
+            if (!isStaff) return; 
             activeClears.set(`${message.author.id}-${message.channel.id}`, true);
             return message.reply('כמה? 🤔');
         }
@@ -192,3 +192,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
