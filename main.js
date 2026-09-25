@@ -127,6 +127,29 @@ async function main() {
             }
         }
 
+        // בדיקה של פקודת הניקוי האינטראקטיבית (אם המשתמש בשלב של בחירת מספר הודעות)
+        const sessionKey = `${message.author.id}-${message.channel.id}`;
+        if (activeClears.has(sessionKey)) {
+            activeClears.delete(sessionKey); // מוחק את הסשן מיד כדי שלא ייתקע
+            
+            const amount = parseInt(message.content.trim());
+            if (isNaN(amount) || amount < 1 || amount > 100) {
+                return message.reply('❌ המספר שהזנת לא תקין. יש לבחור מספר בין 1 ל-100.');
+            }
+
+            try {
+                // מוחק את הודעת המספר של המשתמש + כמות ההודעות שביקש
+                await message.channel.bulkDelete(amount + 1, true);
+                
+                const successMsg = await message.channel.send(`🧹 נמחקו בהצלחה **${amount}** הודעות מהצ'אט!`);
+                setTimeout(() => successMsg.delete().catch(() => null), 4000);
+            } catch (error) {
+                console.error("שגיאה בניקוי הודעות:", error);
+                message.channel.send("❌ לא הצלחתי למחוק הודעות. שים לב שלא ניתן למחוק הודעות ישנות יותר מ-14 ימים.");
+            }
+            return;
+        }
+
         const prefix = '!';
         if (!message.content.startsWith(prefix)) return;
 
@@ -168,28 +191,11 @@ async function main() {
             activeClears.set(`${message.author.id}-${message.channel.id}`, true);
             return message.reply('כמה? 🤔');
         }
-
-        const sessionKey = `${message.author.id}-${message.channel.id}`;
-        if (activeClears.has(sessionKey)) {
-            activeClears.delete(sessionKey);
-            const amount = parseInt(message.content.trim());
-            if (isNaN(amount) || amount < 1 || amount > 100) {
-                return message.reply('התהליך בוטל. נא לבחור מספר תקין בין 1 ל-100! 🔢').then(msg => {
-                    setTimeout(() => msg.delete().catch(() => null), 4000);
-                });
-            }
-            await message.channel.bulkDelete(amount + 2, true)
-                .then(deletedMessages => {
-                    message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 2}** הודעות לבקשתך!`).then(msg => {
-                        setTimeout(() => msg.delete().catch(() => null), 3000);
-                    });
-                }).catch(() => null);
-            return;
-        }
     });
 
     client.login(botToken);
 }
 
-main().catch(console.error);
+main();
+
 
