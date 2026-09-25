@@ -1,9 +1,7 @@
 import os
 import re
-import json
 import asyncio
 import threading
-from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import discord
@@ -12,84 +10,58 @@ from dotenv import load_dotenv
 
 
 # ============================================================
-# SFS BOT
-# All-in-one Discord bot
+# SFS BOT - ALL IN ONE
 # ============================================================
 
 load_dotenv()
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_FILE = BASE_DIR / "config.json"
+
+# ============================================================
+# 🔧 הגדרות שרת
+# ============================================================
+
+WELCOME_CHANNEL_ID = 1552769580856909938
+MEMBER_COUNT_CHANNEL_ID = 1552806717308543046
+RULES_CHANNEL_ID = 1552769582278648009
+GENERAL_CHANNEL_ID = 1552769587408543927
+
+# 👑 מי שמחזיק ברול הזה יכול להשתמש ב"ניקוי"
+ALLOWED_CLEAR_ROLE_ID = 1552769521885118494
 
 
 # ============================================================
-# CONFIG
+# 🔐 Token
 # ============================================================
-
-DEFAULT_CONFIG = {
-    "welcomeChannelId": "",
-    "memberCountChannelId": "",
-    "allowedClearRoleId": "",
-
-    "rulesChannelId": "1552769582278648009",
-    "rolesChannelId": "1552769584795226273",
-    "generalChannelId": "1552769592378658939",
-
-    "bannerUrl": ""
-}
-
-
-def load_config():
-    if not CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(
-                DEFAULT_CONFIG,
-                f,
-                indent=4,
-                ensure_ascii=False
-            )
-
-        print("⚠️ נוצר config.json חדש. תמלא את ההגדרות.")
-        return DEFAULT_CONFIG.copy()
-
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            config = json.load(f)
-
-        for key, value in DEFAULT_CONFIG.items():
-            config.setdefault(key, value)
-
-        return config
-
-    except Exception as e:
-        print(f"❌ שגיאה בקריאת config.json: {e}")
-        return DEFAULT_CONFIG.copy()
-
-
-config = load_config()
-
-
-# ============================================================
-# TOKEN
-# ============================================================
+# שים את הטוקן שלך ב-Render Environment Variables:
+# DISCORD_TOKEN=YOUR_TOKEN
+#
+# אל תשים את הטוקן בתוך הקוד ואל תעלה אותו ל-GitHub.
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 if not TOKEN:
-    TOKEN = config.get("token")
-
-if TOKEN == "PROCESS_ENV_TOKEN":
-    TOKEN = os.getenv("DISCORD_TOKEN")
-
-if not TOKEN:
     raise RuntimeError(
-        "❌ לא נמצא Discord Token!\n"
-        "שים DISCORD_TOKEN ב-.env או ב-Environment Variables."
+        "❌ לא נמצא DISCORD_TOKEN!\n"
+        "שים את הטוקן שלך ב-Render תחת Environment Variables."
     )
 
 
 # ============================================================
-# KEEP ALIVE SERVER
+# 🖼️ BANNER
+# ============================================================
+# שים ב-Render Environment Variables:
+# BANNER_URL=https://....
+#
+# או החלף ישירות כאן בקישור שלך.
+
+BANNER_URL = os.getenv(
+    "BANNER_URL",
+    ""
+)
+
+
+# ============================================================
+# 🌐 WEB SERVER - Render
 # ============================================================
 
 class KeepAliveHandler(BaseHTTPRequestHandler):
@@ -121,7 +93,9 @@ def start_web_server():
         KeepAliveHandler
     )
 
-    print(f"🌐 Web server running on port {port}")
+    print(
+        f"🌐 Web server running on port {port}"
+    )
 
     server.serve_forever()
 
@@ -133,7 +107,7 @@ threading.Thread(
 
 
 # ============================================================
-# DISCORD INTENTS
+# 🤖 DISCORD INTENTS
 # ============================================================
 
 intents = discord.Intents.default()
@@ -145,7 +119,7 @@ intents.message_content = True
 
 
 # ============================================================
-# BOT
+# 🤖 BOT
 # ============================================================
 
 bot = commands.Bot(
@@ -156,7 +130,7 @@ bot = commands.Bot(
 
 
 # ============================================================
-# BANNED WORDS
+# 🤬 מילים אסורות
 # ============================================================
 
 BANNED_WORDS = [
@@ -180,7 +154,7 @@ BANNED_WORDS = [
 ]
 
 
-def escape_regex(text):
+def escape_regex(text: str) -> str:
     return re.escape(text)
 
 
@@ -196,7 +170,7 @@ BANNED_REGEX = re.compile(
 
 
 # ============================================================
-# ACTIVE CLEAR SESSIONS
+# 🧹 SESSIONS של ניקוי
 # ============================================================
 
 active_clears = {}
@@ -204,11 +178,11 @@ active_clears = {}
 CLEAR_TIMEOUT = 60
 
 
-def make_session_key(user_id, channel_id):
+def make_session_key(user_id: int, channel_id: int) -> str:
     return f"{user_id}:{channel_id}"
 
 
-async def clear_timeout(key):
+async def clear_session_timeout(key: str):
 
     try:
         await asyncio.sleep(CLEAR_TIMEOUT)
@@ -219,7 +193,7 @@ async def clear_timeout(key):
     active_clears.pop(key, None)
 
 
-def start_clear_session(key):
+def start_clear_session(key: str):
 
     old_task = active_clears.get(key)
 
@@ -227,11 +201,11 @@ def start_clear_session(key):
         old_task.cancel()
 
     active_clears[key] = asyncio.create_task(
-        clear_timeout(key)
+        clear_session_timeout(key)
     )
 
 
-def end_clear_session(key):
+def end_clear_session(key: str):
 
     task = active_clears.get(key)
 
@@ -242,147 +216,118 @@ def end_clear_session(key):
 
 
 # ============================================================
-# PERMISSIONS
+# 🎖️ בדיקת הרשאת ניקוי
 # ============================================================
 
-def has_clear_permission(member):
+def has_clear_permission(member: discord.Member) -> bool:
 
     if not isinstance(member, discord.Member):
         return False
 
-    # מנהל/Manage Messages
+    # מנהלים עם Manage Messages יכולים גם
     if member.guild_permissions.manage_messages:
         return True
 
-    role_id = config.get(
-        "allowedClearRoleId"
-    )
-
-    if not role_id:
-        return False
-
-    try:
-        role_id = int(role_id)
-    except (ValueError, TypeError):
-        return False
-
     return any(
-        role.id == role_id
+        role.id == ALLOWED_CLEAR_ROLE_ID
         for role in member.roles
     )
 
 
 # ============================================================
-# MEMBER COUNT
+# 👥 עדכון מונה חברים
 # ============================================================
 
-async def update_member_count(guild):
-
-    channel_id = config.get(
-        "memberCountChannelId"
-    )
-
-    if not channel_id:
-        return
+async def update_member_count(guild: discord.Guild):
 
     try:
 
         channel = guild.get_channel(
-            int(channel_id)
+            MEMBER_COUNT_CHANNEL_ID
         )
 
-        if channel is None:
+        if not channel:
+            print(
+                "⚠️ ערוץ מונה החברים לא נמצא."
+            )
             return
 
         await channel.edit(
             name=f"👥 חברים בשרת: {guild.member_count}"
         )
 
-    except Exception as e:
+        print(
+            f"👥 מונה עודכן: {guild.member_count}"
+        )
+
+    except discord.Forbidden:
 
         print(
-            f"❌ Member counter error: {e}"
+            "❌ אין לבוט הרשאה לשנות את שם ערוץ המונה."
+        )
+
+    except discord.HTTPException as error:
+
+        print(
+            f"❌ שגיאה בעדכון מונה: {error}"
         )
 
 
 # ============================================================
-# READY
+# ✅ READY
 # ============================================================
 
 @bot.event
 async def on_ready():
 
     print()
-    print("=" * 55)
+    print("=" * 60)
     print("🔥 SFS BOT ONLINE")
-    print("=" * 55)
+    print("=" * 60)
     print(f"🤖 Bot: {bot.user}")
-    print(f"🆔 ID: {bot.user.id}")
+    print(f"🆔 Bot ID: {bot.user.id}")
     print(f"🏠 Servers: {len(bot.guilds)}")
     print("🛡️ Auto-Mod: ON")
-    print("🧹 Clear System: ON")
-    print("🎈 Welcome System: ON")
+    print("🚫 Anti-Invite: ON")
+    print("🧹 Clear: ON")
+    print("🎈 Welcome: ON")
     print("👥 Member Counter: ON")
-    print("=" * 55)
+    print("=" * 60)
     print()
 
     for guild in bot.guilds:
-
-        await update_member_count(
-            guild
-        )
+        await update_member_count(guild)
 
 
 # ============================================================
-# MEMBER JOIN
+# 🎈 MEMBER JOIN
 # ============================================================
 
 @bot.event
-async def on_member_join(member):
+async def on_member_join(member: discord.Member):
 
-    banner_url = config.get(
-        "bannerUrl"
-    )
-
-    rules_channel = config.get(
-        "rulesChannelId"
-    )
-
-    roles_channel = config.get(
-        "rolesChannelId"
-    )
-
-    general_channel = config.get(
-        "generalChannelId"
-    )
-
-    description = (
-        f"👋 אהלן {member.mention} "
-        f"וברוך הבא לשרת הרשמי של **SFS**!\n\n"
-
-        f"תפסו כיסא בפרלמנט, "
-        f"תכינו קפה ותתחילו להכיר אנשים.\n"
-        f"כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n"
-
-        f"**לפני שאתה קופץ למים, "
-        f"תעשה סיבוב קצר:**\n\n"
-
-        f"📜 חוקים — "
-        f"<#{rules_channel}>\n"
-
-        f"🎭 תפקידים — "
-        f"<#{roles_channel}>\n"
-
-        f"💬 צ'אט — "
-        f"<#{general_channel}>\n\n"
-
-        f"יאללה, בלי להתבייש.\n"
-        f"תהנו! 💜"
-    )
-
-    embed = discord.Embed(
+    welcome_embed = discord.Embed(
         title="🇮🇱 ברוכים הבאים ל-SFS 🇮🇱",
-        description=description,
+        description=(
+            f"👋 אהלן {member.mention} וברוך הבא "
+            f"לשרת הרשמי של **SFS**!\n\n"
+
+            f"תפסו כיסא בפרלמנט, תכינו קפה "
+            f"ותתחילו להכיר אנשים.\n"
+            f"כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n"
+
+            f"**לפני שאתה קופץ למים, "
+            f"תעשה סיבוב קצר:**\n\n"
+
+            f"📜 ספר החוקים — "
+            f"<#{RULES_CHANNEL_ID}>\n"
+
+            f"💬 צ'אט ראשי — "
+            f"<#{GENERAL_CHANNEL_ID}>\n\n"
+
+            f"יאללה, בלי להתבייש.\n"
+            f"תהנו! 💜"
+        ),
         color=discord.Color.from_rgb(
             88,
             101,
@@ -390,80 +335,80 @@ async def on_member_join(member):
         )
     )
 
-    embed.set_thumbnail(
+    welcome_embed.set_thumbnail(
         url=member.display_avatar.url
     )
 
-    if banner_url:
-        embed.set_image(
-            url=banner_url
+    if BANNER_URL:
+        welcome_embed.set_image(
+            url=BANNER_URL
         )
 
-    embed.timestamp = discord.utils.utcnow()
+    welcome_embed.timestamp = discord.utils.utcnow()
 
     # --------------------------------------------------------
-    # DM
+    # 📩 DM
     # --------------------------------------------------------
 
     try:
 
         await member.send(
-            embed=embed
+            embed=welcome_embed
         )
 
     except (
         discord.Forbidden,
         discord.HTTPException
     ):
+
         pass
 
     # --------------------------------------------------------
-    # CHANNEL
+    # 📢 Welcome Channel
     # --------------------------------------------------------
 
-    welcome_channel_id = config.get(
-        "welcomeChannelId"
-    )
+    try:
 
-    if welcome_channel_id:
+        channel = member.guild.get_channel(
+            WELCOME_CHANNEL_ID
+        )
 
-        try:
+        if channel:
 
-            channel = member.guild.get_channel(
-                int(welcome_channel_id)
-            )
+            if BANNER_URL:
 
-            if channel:
-
-                if banner_url:
-
-                    banner_embed = discord.Embed(
-                        color=discord.Color.from_rgb(
-                            88,
-                            101,
-                            242
-                        )
+                banner_embed = discord.Embed(
+                    color=discord.Color.from_rgb(
+                        88,
+                        101,
+                        242
                     )
-
-                    banner_embed.set_image(
-                        url=banner_url
-                    )
-
-                    await channel.send(
-                        embed=banner_embed
-                    )
-
-                await channel.send(
-                    f"{member.mention} "
-                    f"ברוך הבא יעמה! "
-                    f"מקווים שתהנה 💜"
                 )
 
-        except Exception as e:
+                banner_embed.set_image(
+                    url=BANNER_URL
+                )
 
-            print(
-                f"❌ Welcome channel error: {e}"
+                await channel.send(
+                    embed=banner_embed
+                )
+
+            await channel.send(
+                f"{member.mention} "
+                f"ברוך הבא יעמה! "
+                f"מקווים שתהנה 💜"
             )
+
+    except (
+        discord.Forbidden,
+        discord.HTTPException
+    ):
+
+        pass
+
+    # --------------------------------------------------------
+    # 👥 Counter
+    # --------------------------------------------------------
 
     await update_member_count(
         member.guild
@@ -471,11 +416,11 @@ async def on_member_join(member):
 
 
 # ============================================================
-# MEMBER LEAVE
+# 🚪 MEMBER LEAVE
 # ============================================================
 
 @bot.event
-async def on_member_remove(member):
+async def on_member_remove(member: discord.Member):
 
     await update_member_count(
         member.guild
@@ -483,20 +428,21 @@ async def on_member_remove(member):
 
 
 # ============================================================
-# AUTO MOD
+# 🛡️ AUTO MOD
 # ============================================================
 
-async def auto_moderation(message):
+async def run_auto_moderation(message: discord.Message):
 
     member = message.author
 
+    # רול מנהלים / Manage Messages פטור מהפילטר
     if has_clear_permission(member):
         return False
 
     content = message.content.lower()
 
     # --------------------------------------------------------
-    # SWEAR FILTER
+    # 🤬 קללות
     # --------------------------------------------------------
 
     if BANNED_REGEX.search(content):
@@ -527,7 +473,7 @@ async def auto_moderation(message):
         return True
 
     # --------------------------------------------------------
-    # DISCORD INVITE FILTER
+    # 🚫 INVITES
     # --------------------------------------------------------
 
     invite_patterns = [
@@ -574,20 +520,19 @@ async def auto_moderation(message):
 
 
 # ============================================================
-# CLEAR SYSTEM
+# 🧹 ניקוי
 # ============================================================
 
-async def handle_clear(message):
+async def start_clear(message: discord.Message):
 
-    member = message.author
-
-    if not has_clear_permission(member):
+    if not has_clear_permission(
+        message.author
+    ):
 
         try:
 
             warning = await message.reply(
-                "אין לך את הרול המתאים "
-                "כדי לנהל שיחת ניקוי עם הבוט! ❌"
+                "אין לך הרשאה להשתמש במערכת הניקוי! ❌"
             )
 
             await asyncio.sleep(3)
@@ -608,7 +553,7 @@ async def handle_clear(message):
         return
 
     key = make_session_key(
-        member.id,
+        message.author.id,
         message.channel.id
     )
 
@@ -617,15 +562,15 @@ async def handle_clear(message):
     await message.reply(
         "כמה? 🤔\n"
         "יש לך **דקה** לענות.\n"
-        "אפשר לנקות בין **1 ל-100 הודעות**."
+        "כתוב מספר בין **1 ל-100**."
     )
 
 
 # ============================================================
-# CLEAR NUMBER
+# 🔢 מספר ניקוי
 # ============================================================
 
-async def handle_clear_number(message):
+async def process_clear_number(message: discord.Message):
 
     key = make_session_key(
         message.author.id,
@@ -643,13 +588,13 @@ async def handle_clear_number(message):
 
     except ValueError:
 
-        # לא מספר — לא מבטל את הסשן
+        # אם זה לא מספר, מחכים להודעה הבאה
         return False
 
     end_clear_session(key)
 
     # --------------------------------------------------------
-    # RANGE
+    # בדיקת טווח
     # --------------------------------------------------------
 
     if amount < 1 or amount > 100:
@@ -658,7 +603,7 @@ async def handle_clear_number(message):
 
             warning = await message.reply(
                 "❌ התהליך בוטל.\n"
-                "בחר מספר בין **1 ל-100**."
+                "צריך לבחור מספר בין **1 ל-100**."
             )
 
             await asyncio.sleep(4)
@@ -674,29 +619,19 @@ async def handle_clear_number(message):
         return True
 
     # --------------------------------------------------------
-    # DELETE
+    # ניקוי
     # --------------------------------------------------------
 
     try:
 
-        # אנחנו כוללים גם את הודעת המספר.
-        # לכן מוחקים amount + 1,
-        # אבל לעולם לא יותר מ-100.
-        limit = min(
-            amount + 1,
-            100
-        )
-
         deleted = await message.channel.purge(
-            limit=limit,
+            limit=amount + 1,
             bulk=True
         )
 
-        # ההודעה הנוכחית היא אחת מהודעות המחיקה
-        # ולכן לא מנסים "להוריד 2" באופן עיוור.
         deleted_count = len(deleted)
 
-        result = await message.channel.send(
+        success = await message.channel.send(
             f"🧹 ניקיתי בהצלחה "
             f"**{deleted_count}** "
             f"הודעות!"
@@ -705,7 +640,7 @@ async def handle_clear_number(message):
         await asyncio.sleep(3)
 
         try:
-            await result.delete()
+            await success.delete()
         except discord.HTTPException:
             pass
 
@@ -715,18 +650,17 @@ async def handle_clear_number(message):
             "❌ אין לי הרשאה למחוק הודעות."
         )
 
-    except discord.HTTPException as e:
+    except discord.HTTPException as error:
 
         print(
-            f"❌ Clear error: {e}"
+            f"❌ Clear error: {error}"
         )
 
         try:
 
             await message.channel.send(
                 "❌ לא הצלחתי לבצע את הניקוי.\n"
-                "ייתכן שחלק מההודעות ישנות מדי "
-                "למחיקה קבוצתית."
+                "יכול להיות שיש הודעות ישנות מדי."
             )
 
         except discord.HTTPException:
@@ -736,11 +670,11 @@ async def handle_clear_number(message):
 
 
 # ============================================================
-# MESSAGE CREATE
+# 💬 MESSAGE CREATE
 # ============================================================
 
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
 
     if message.author.bot:
         return
@@ -749,10 +683,10 @@ async def on_message(message):
         return
 
     # --------------------------------------------------------
-    # AUTO MOD
+    # 🛡️ Auto Mod
     # --------------------------------------------------------
 
-    blocked = await auto_moderation(
+    blocked = await run_auto_moderation(
         message
     )
 
@@ -760,30 +694,30 @@ async def on_message(message):
         return
 
     # --------------------------------------------------------
-    # CLEAR NUMBER
+    # 🧹 בדיקת ניקוי פעיל
     # --------------------------------------------------------
 
-    handled = await handle_clear_number(
+    clear_handled = await process_clear_number(
         message
     )
 
-    if handled:
+    if clear_handled:
         return
 
     # --------------------------------------------------------
-    # "ניקוי"
+    # 🧹 "ניקוי"
     # --------------------------------------------------------
 
     if message.content.strip() == "ניקוי":
 
-        await handle_clear(
+        await start_clear(
             message
         )
 
         return
 
     # --------------------------------------------------------
-    # COMMANDS
+    # פקודות
     # --------------------------------------------------------
 
     await bot.process_commands(
@@ -792,7 +726,7 @@ async def on_message(message):
 
 
 # ============================================================
-# BASIC COMMANDS
+# 🏓 PING
 # ============================================================
 
 @bot.command()
@@ -803,10 +737,13 @@ async def ping(ctx):
     )
 
     await ctx.send(
-        f"🏓 Pong!\n"
-        f"`{latency}ms`"
+        f"🏓 **Pong!** `{latency}ms`"
     )
 
+
+# ============================================================
+# 🏠 SERVER INFO
+# ============================================================
 
 @bot.command()
 async def server(ctx):
@@ -823,14 +760,14 @@ async def server(ctx):
     )
 
     embed.add_field(
-        name="👥 Members",
+        name="👥 חברים",
         value=str(
             guild.member_count
         )
     )
 
     embed.add_field(
-        name="💬 Channels",
+        name="💬 ערוצים",
         value=str(
             len(guild.channels)
         )
@@ -845,6 +782,7 @@ async def server(ctx):
     )
 
     if guild.icon:
+
         embed.set_thumbnail(
             url=guild.icon.url
         )
@@ -854,6 +792,10 @@ async def server(ctx):
     )
 
 
+# ============================================================
+# 📖 HELP
+# ============================================================
+
 @bot.command()
 async def helpme(ctx):
 
@@ -861,9 +803,11 @@ async def helpme(ctx):
         title="🤖 SFS Bot",
         description=(
             "**מערכות פעילות:**\n\n"
+
             "🧹 `ניקוי` — ניקוי הודעות\n"
             "🏓 `!ping` — בדיקת פינג\n"
             "🏠 `!server` — מידע על השרת\n\n"
+
             "🛡️ Auto-Mod פעיל\n"
             "🚫 Anti-Invite פעיל\n"
             "🎈 Welcome פעיל\n"
@@ -882,7 +826,7 @@ async def helpme(ctx):
 
 
 # ============================================================
-# ERROR HANDLING
+# ❌ COMMAND ERRORS
 # ============================================================
 
 @bot.event
@@ -903,7 +847,7 @@ async def on_command_error(
 
 
 # ============================================================
-# START
+# 🚀 START
 # ============================================================
 
 async def main():
@@ -929,8 +873,9 @@ if __name__ == "__main__":
             "🛑 SFS Bot stopped."
         )
 
-    except Exception as e:
+    except Exception as error:
 
         print(
-            f"🔥 Fatal error: {e}"
+            f"🔥 Fatal error: {error}"
+        )
         )
