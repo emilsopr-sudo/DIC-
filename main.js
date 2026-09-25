@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
@@ -65,8 +65,8 @@ async function main() {
     client.on('guildMemberAdd', async (member) => {
         console.log(`${member.user.tag} נכנס לשרת SFS.`);
         
-        // 🖼️ כאן בשורה 53 אתה יכול להחליף את הקישור של התמונה מתי שתרצה!
-        const bannerUrl = 'https://cdn.discordapp.com/attachments/1552769614818058335/1552789243393343579/image.png?ex=6ab6e32d&is=6ab591ad&hm=902ff97601c1b774187fa1e6e9934f6dca6da1322dd4cf7177e975e10876d99b&';
+        // כאן בשורה 64 אתה יכול להחליף את הקישור של התמונה מתי שתרצה!
+        const bannerUrl = 'https://postimg.cc';
 
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#5865F2')
@@ -74,7 +74,7 @@ async function main() {
             .setDescription(
                 `👋 אהלן ${member} וברוך הבא לשרת הרשמי של **SFS**!\n` +
                 `תפסו כיסא בפרלמנט, תכינו קפה ותתחילו להכיר אנשים.\n` +
-                `כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n` +
+                `כאן לא עושים פוזות, כולם מדברים WITH כולם.\n\n` +
                 `**לפני שאתה קופץ למים, תעשה סיבוב קצר:**\n` +
                 `📜 תראה מה מותר ומה אסור ב- <#1552769582278648009>\n` +
                 `🎭 תבחר מה מעניין אותך ב- <#1552769584795226273>\n` +
@@ -105,10 +105,12 @@ async function main() {
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        const hasAllowedRole = message.member.roles.cache.has(config.allowedClearRoleId);
+        // 🛡️ בדיקה אוטומטית: האם למשתמש יש הרשאת ניהול הודעות או מנהל מערכת כללי
+        const isStaff = message.member.permissions.has(PermissionFlagsBits.ManageMessages) || 
+                        message.member.permissions.has(PermissionFlagsBits.Administrator);
 
-        // Auto-Mod (הגנה אוטומטית מקללות)
-        if (!hasAllowedRole) {
+        // Auto-Mod (הגנה אוטומטית מקללות - פועל רק על משתמשים רגילים)
+        if (!isStaff) {
             const messageContentLower = message.content.toLowerCase();
             const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
             if (containsBannedWord) {
@@ -133,7 +135,7 @@ async function main() {
 
         // 📜 פקודה: יצירת חלון החוקים המקצועי לשרת
         if (command === 'חוקים') {
-            if (!hasAllowedRole) return;
+            if (!isStaff) return; // רק צוות מורשה יכול להפעיל
             await message.delete().catch(() => null);
 
             const rulesEmbed = new EmbedBuilder()
@@ -148,7 +150,7 @@ async function main() {
                     `📢 ** פרסום וספאם**\n` +
                     `אין לפרסם שרתי דיסקורד אחרים, קישורים חיצוניים או לבצע ספאם המוני (הצפה של הודעות או תיוגים מיותרים) בצ'אטים.\n\n` +
                     `🎮 ** סדר בחדרים**\n` +
-                    `נา להשתמש בכל חדר למטרה שלו (למשל: פקודות של בוטים בחדר \`#פקודות-בוטים\`, דיבורי גיימינג בחדרים המתאימים וכו').\n\n` +
+                    `נא להשתמש בכל חדר למטרה שלו (למשל: פקודות של בוטים בחדר \`#פקודות-בוטים\`, דיבורי גיימינג בחדרים המתאימים וכו').\n\n` +
                     `🎙️ ** שיחות קוליות**\n` +
                     `אין להספים מוזיקה, לצעוק או להפריע בחדרים הקוליים. משתמשים שלא פעילים יועברו אוטומטית לחדר \`💤┃AFK\`.\n\n` +
                     `💜 *הנהלת השרת שומרת לעצמה את הזכות לפעול נגד כל משתמש שיפר את הסדר הציבורי בפרלמנט. תהנו!*`
@@ -160,14 +162,9 @@ async function main() {
             return message.channel.send({ embeds: [rulesEmbed] });
         }
 
-        // פקודת ניקוי
+        // פקודת ניקוי אינטראקטיבית בעברית
         if (command === 'ניקוי') {
-            if (!hasAllowedRole) {
-                return message.reply('אין לך את הרול המתאים כדי לנהל שיחת ניקוי עם הבוט! ❌').then(msg => {
-                    setTimeout(() => msg.delete().catch(() => null), 3000);
-                    setTimeout(() => message.delete().catch(() => null), 3000);
-                });
-            }
+            if (!isStaff) return; // רק צוות מורשה יכול להפעיל
             activeClears.set(`${message.author.id}-${message.channel.id}`, true);
             return message.reply('כמה? 🤔');
         }
@@ -195,4 +192,3 @@ async function main() {
 }
 
 main().catch(console.error);
-
