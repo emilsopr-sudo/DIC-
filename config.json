@@ -4,5 +4,6 @@
   "rulesChannelId": "1552769582278648009",
   "generalChannelId": "1552769587408543927",
   "allowedClearRoleId": "1552769521885118494",
-  "bannerUrl": ""
+  "bannerUrl": "",
+  "embedColor": "#5865F2"
 }
