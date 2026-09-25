@@ -109,7 +109,7 @@ async function main() {
         const isStaff = message.member.permissions.has(PermissionFlagsBits.ManageMessages) || 
                         message.member.permissions.has(PermissionFlagsBits.Administrator);
 
-        // Auto-Mod (הגנה אוטומטית מקללות)
+        // 🤬 Auto-Mod (הגנה אוטומטית מקללות ופרסומים)
         if (!isStaff) {
             const messageContentLower = message.content.toLowerCase();
             const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
@@ -127,22 +127,25 @@ async function main() {
             }
         }
 
-        // בדיקה של פקודת הניקוי האינטראקטיבית (אם המשתמש בשלב של בחירת מספר הודעות)
+        // 🔍 בדיקה 1: האם המשתמש נמצא כרגע בתהליך של פקודת הניקוי (הקליד מספר)?
         const sessionKey = `${message.author.id}-${message.channel.id}`;
         if (activeClears.has(sessionKey)) {
-            activeClears.delete(sessionKey); // מוחק את הסשן מיד כדי שלא ייתקע
-            
             const amount = parseInt(message.content.trim());
             if (isNaN(amount) || amount < 1 || amount > 100) {
-                return message.reply('❌ המספר שהזנת לא תקין. יש לבחור מספר בין 1 ל-100.');
+                activeClears.delete(sessionKey); // מחיקת הסשן שנכשל כדי שלא ייתקע הצ'אט
+                return message.reply('❌ הפעולה בוטלה. המספר שהזנת לא תקין, יש לבחור מספר בין 1 ל-100. תריץ `!ניקוי` מחדש.').then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000);
+                });
             }
+
+            activeClears.delete(sessionKey); // מוחק את הסשן מיד
 
             try {
                 // מוחק את הודעת המספר של המשתמש + כמות ההודעות שביקש
                 await message.channel.bulkDelete(amount + 1, true);
                 
                 const successMsg = await message.channel.send(`🧹 נמחקו בהצלחה **${amount}** הודעות מהצ'אט!`);
-                setTimeout(() => successMsg.delete().catch(() => null), 4000);
+                setTimeout(() => successMsg.delete().catch(() => null), 3000);
             } catch (error) {
                 console.error("שגיאה בניקוי הודעות:", error);
                 message.channel.send("❌ לא הצלחתי למחוק הודעות. שים לב שלא ניתן למחוק הודעות ישנות יותר מ-14 ימים.");
@@ -150,6 +153,7 @@ async function main() {
             return;
         }
 
+        // 🔍 בדיקה 2: האם זו פקודה רגילה שמתחילה ב- !
         const prefix = '!';
         if (!message.content.startsWith(prefix)) return;
 
@@ -185,7 +189,7 @@ async function main() {
             return message.channel.send({ embeds: [rulesEmbed] });
         }
 
-        // פקודת ניקוי אינטראקטיבית בעברית
+        // פקודת ניקוי אינטראקטיבית בעברית (`!ניקוי`)
         if (command === 'ניקוי') {
             if (!isStaff) return; 
             activeClears.set(`${message.author.id}-${message.channel.id}`, true);
@@ -197,5 +201,4 @@ async function main() {
 }
 
 main();
-
 
