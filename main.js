@@ -1,55 +1,166 @@
-import discord
-from discord.ext import commands
-import asyncio
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const fs = require('fs').promises;
+const path = require('path');
+const http = require('http');
 
-# הגדרת ה-Intents (הרשאות הבוט)
-intents = discord.Intents.default()
-intents.message_content = True
+// 🌍 שרת אינטרנט בשביל Render כדי לשמור על הבוט דולק 24/7
+http.createServer((req, res) => {
+    res.write("SFS Safe Multi-Bot is running!");
+    res.end();
+}).listen(process.env.PORT || 3000);
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+async function loadConfig() {
+    const configPath = path.join(__dirname, 'config.json');
+    const configData = await fs.readFile(configPath, 'utf-8');
+    return JSON.parse(configData);
+}
 
-# שים כאן את השם המדויק של הרול שמורשה לנקות הודעות
-ALLOWED_ROLE_NAME = "שם הרול המורשה" 
+async function updateMemberCount(guild, channelId) {
+    if (!channelId) return;
+    try {
+        const memberCountChannel = await guild.channels.fetch(channelId).catch(() => null);
+        if (memberCountChannel) {
+            const totalMembers = guild.memberCount;
+            await memberCountChannel.setName(`👥 חברים בשרת: ${totalMembers}`);
+        }
+    } catch (error) {
+        console.error("שגיאה בעדכון המונה:", error.message);
+    }
+}
 
-@bot.event
-async def on_ready():
-    print(f'הבוט מחובר כחבר בשם: {bot.user.name}')
+// 🤬 רשימת קללות ומילים אסורות (תוכל להוסיף או לשנות כאן מילים בתוך הגרשיים)
+const bannedWords = [
+    'שרמוטה', 'זונה', 'מניאק', 'קוקסינל', 'הומו', 'נאצי', 'כוסאמאק', 'זין', 'שרמוט', 'בן זונה',
+    'fuck', 'bitch', 'asshole', 'nigger', 'nigga', 'whore', 'slut'
+];
 
-@bot.get_command  # הגדרת פקודת הניקוי
-@bot.command(name="ניקוי")
-async def clear_messages(ctx):
-    # 1. בדיקה האם למשתמש יש את הרול המורשה
-    user_roles = [role.name for role in ctx.author.roles]
-    if ALLOWED_ROLE_NAME not in user_roles:
-        await ctx.send("❌ אין לך את ההרשאה (הרול המתאים) לבצע ניקוי הודעות!")
-        return
+const activeClears = new Map();
 
-    # 2. הבוט שואל כמה הודעות למחוק
-    bot_msg = await ctx.send(f"👋 {ctx.author.mention}, כמה הודעות תרצה למחוק?")
+async function main() {
+    const config = await loadConfig();
+    const botToken = config.token === "PROCESS_ENV_TOKEN" ? process.env.DISCORD_TOKEN : config.token;
 
-    # פונקציית בדיקה שמוודאת שרק מי שרשם "ניקוי" עונה, ושהתשובה היא מספר
-    def check(message):
-        return message.author == ctx.author and message.channel == ctx.channel and message.content.isdigit()
+    const client = new Client({
+        intents: [
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMembers,
+            GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.MessageContent
+        ]
+    });
 
-    try:
-        # 3. הבוט מחכה לתשובה (מחכה עד 30 שניות)
-        user_response = await bot.wait_for('message', check=check, timeout=30.0)
-        amount = int(user_response.content)
+    client.once('ready', async () => { 
+        console.log(`Bot connected as ${client.user.tag}! Auto-Mod Active.`); 
+        client.guilds.cache.forEach(guild => {
+            updateMemberCount(guild, config.memberCountChannelId);
+        });
+    });
 
-        # 4. מחיקת ההודעות (כולל הודעת המשתמש, הודעת הבוט והתשובה)
-        # מוסיפים 2 כדי למחוק גם את השאלה של הבוט ואת התשובה של המשתמש
-        deleted = await ctx.channel.purge(limit=amount + 2)
-        
-        # 5. שליחת הודעת אישור זמנית שנמחקת אחרי 3 שניות
-        success_msg = await ctx.send(f"🗑️ נמחקו בהצלחה {len(deleted) - 2} הודעות.")
-        await asyncio.sleep(3)
-        await success_msg.delete()
+    // 🎈 מערכת ברוכים הבאים
+    client.on('guildMemberAdd', async (member) => {
+        const bannerUrl = config.bannerUrl;
+        const welcomeEmbed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setTitle('🇮🇱 ברוכים הבאים ל-SFS 🇮🇱')
+            .setDescription(
+                `👋 אהלן ${member} וברוך הבא לשרת הרשמי של **SFS**!\n` +
+                `תפסו כיסא בפרלמנט, תכינו קפה ותתחילו להכיר אנשים.\n` +
+                `כאן לא עושים פוזות, כולם מדברים עם כולם.\n\n` +
+                `**לפני שאתה קופץ למים, תעשה סיבוב קצר:**\n` +
+                `📜 תראה מה מותר ומה אסור ב- <#1552769582278648009>\n` +
+                `🎭 תבחר מה מעניין אותך ב- <#1552769584795226273>\n` +
+                `💬 ובוא להגיד שלום ב- <#1552769592378658939>\n\n` +
+                `יאללה, בלי להתבייש. תהנו! 💜`
+            )
+            .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+            .setImage(bannerUrl)
+            .setTimestamp();
 
-    except asyncio.TimeoutError:
-        # אם המשתמש לא ענה תוך 30 שניות
-        await bot_msg.edit(content="⏰ הזמן עבר, פקודת הניקוי בוטלה.")
-        await asyncio.sleep(3)
-        await bot_msg.delete()
+        try { await member.send({ embeds: [welcomeEmbed] }); } catch (e) {}
 
-# תמיד תשמור את הטוקן שלך חסוי!
-bot.run('YOUR_BOT_TOKEN_HERE')
+        const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
+        if (welcomeChannel) {
+            const imageEmbed = new EmbedBuilder().setColor('#5865F2').setImage(bannerUrl);
+            await welcomeChannel.send({ embeds: [imageEmbed] }).catch(() => null);
+            await welcomeChannel.send(`${member} ברוך הבא יעמה! מקווים שתהנה💜`).catch(() => null);
+        }
+        updateMemberCount(member.guild, config.memberCountChannelId);
+    });
+
+    client.on('guildMemberRemove', async (member) => {
+        updateMemberCount(member.guild, config.memberCountChannelId);
+    });
+
+    // 🛡️ מערכת ניקוי צ'אט + Auto-Mod (הגנה אוטומטית)
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot || !message.guild) return;
+
+        const hasAllowedRole = message.member.roles.cache.has(config.allowedClearRoleId);
+
+        // ----------------------------------------------------
+        // חלק א': Auto-Mod - פועל רק על משתמשים שאין להם את רול הניהול
+        // ----------------------------------------------------
+        if (!hasAllowedRole) {
+            const messageContentLower = message.content.toLowerCase();
+
+            // 1. בדיקת קללות ומילים אסורות
+            const containsBannedWord = bannedWords.some(word => messageContentLower.includes(word));
+            
+            if (containsBannedWord) {
+                await message.delete().catch(() => null); // מחיקת ההודעה המקוללת בשנייה
+                return message.channel.send(`⚠️ ${message.author}, שמור על השפה שלך! אסור לקלל בשרת הזה. ❌`).then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000); // מחיקת האזהרה אחרי 4 שניות
+                });
+            }
+
+            // 2. בדיקת קישורי הזמנה לשרתים אחרים (Anti-Invite)
+            if (messageContentLower.includes('discord.gg/') || messageContentLower.includes('://discord.com')) {
+                await message.delete().catch(() => null); // מחיקת הקישור המפרסם בשנייה
+                return message.channel.send(`🚫 ${message.author}, חל איסור מוחלט לפרסם שרתי דיסקורד אחרים! ❌`).then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000);
+                });
+            }
+        }
+
+        // ----------------------------------------------------
+        // חלק ב': מערכת ניקוי צ'אט האינטראקטיבית (!clear)
+        // ----------------------------------------------------
+        if (message.content.trim() === 'ניקוי') {
+            if (!hasAllowedRole) {
+                return message.reply('אין לך את הרול המתאים כדי לנהל שיחת ניקוי עם הבוט! ❌').then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 3000);
+                    setTimeout(() => message.delete().catch(() => null), 3000);
+                });
+            }
+            activeClears.set(`${message.author.id}-${message.channel.id}`, true);
+            return message.reply('כמה? 🤔');
+        }
+
+        const sessionKey = `${message.author.id}-${message.channel.id}`;
+        if (activeClears.has(sessionKey)) {
+            activeClears.delete(sessionKey);
+            const amount = parseInt(message.content.trim());
+
+            if (isNaN(amount) || amount < 1 || amount > 100) {
+                return message.reply('התהליך בוטל. נא לבחור מספר תקין בין 1 ל-100 בשלב הבא! 🔢').then(msg => {
+                    setTimeout(() => msg.delete().catch(() => null), 4000);
+                });
+            }
+
+            await message.channel.bulkDelete(amount + 2, true)
+                .then(deletedMessages => {
+                    message.channel.send(`🧹 ניקיתי בהצלחה **${deletedMessages.size - 2}** הודעות לבקשתך!`).then(msg => {
+                        setTimeout(() => msg.delete().catch(() => null), 3000);
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    message.channel.send('התרחשה שגיאה. שים לב שאי אפשר למחוק הודעות ישנות משבועיים! ❌');
+                });
+        }
+    });
+
+    client.login(botToken);
+}
+
+main().catch(console.error);
