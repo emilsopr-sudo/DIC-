@@ -1,4 +1,12 @@
-"main": "bot.js",
-"scripts": {
-    "start": "node bot.js"
+{
+  "name": "sfs-bot",
+  "version": "1.0.0",
+  "description": "SFS Discord Bot",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.0.0"
+  }
 }
