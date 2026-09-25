@@ -1,34 +1,46 @@
-/* ============================================================
-   SFS BOT — Snapzy Frozi SL Community Discord Bot
-   Node.js + discord.js v14 (CommonJS)
-   ============================================================ */
+```js
+// ============================================================
+// SFS BOT — Snapzy Frozi SL
+// Discord.js v14 + Node.js
+// ============================================================
 
 const {
   Client,
   GatewayIntentBits,
-  Partials,
   EmbedBuilder,
   PermissionsBitField,
   Events,
 } = require("discord.js");
+
 const http = require("http");
 const config = require("./config.json");
 
-/* ============================================================
-   SECTION: Environment / Token
-   ============================================================ */
+// ============================================================
+// SETTINGS
+// ============================================================
 
 const TOKEN = process.env.DISCORD_TOKEN;
+const PORT = Number(process.env.PORT) || 10000;
+
+const COLOR = config.embedColor || "#5865F2";
 const BANNER_URL = process.env.BANNER_URL || config.bannerUrl || "";
 
+// ============================================================
+// TOKEN CHECK
+// ============================================================
+
 if (!TOKEN) {
-  console.error("❌ Missing DISCORD_TOKEN environment variable. Set it in Render's Environment tab.");
+  console.error("❌ ERROR: DISCORD_TOKEN is missing!");
+  console.error("Go to Render → Environment and add DISCORD_TOKEN.");
   process.exit(1);
 }
 
-/* ============================================================
-   SECTION: Client Setup
-   ============================================================ */
+console.log("🔑 DISCORD_TOKEN found.");
+console.log("🚀 Starting SFS Bot...");
+
+// ============================================================
+// DISCORD CLIENT
+// ============================================================
 
 const client = new Client({
   intents: [
@@ -37,16 +49,13 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
-  partials: [Partials.Channel, Partials.Message, Partials.GuildMember],
 });
 
-/* ============================================================
-   SECTION: Constants — Auto-Mod word lists & patterns
-   ============================================================ */
+// ============================================================
+// BANNED WORDS
+// ============================================================
 
-// Exact-word banned list (checked against whole tokenized words, not substrings)
 const BANNED_WORDS = [
-  // Hebrew
   "שרמוטה",
   "זונה",
   "מניאק",
@@ -55,7 +64,6 @@ const BANNED_WORDS = [
   "כוסאמאק",
   "זין",
   "שרמוט",
-  // English
   "fuck",
   "bitch",
   "asshole",
@@ -63,106 +71,149 @@ const BANNED_WORDS = [
   "nigga",
   "whore",
   "slut",
-].map((w) => w.toLowerCase());
+];
 
-// Multi-word phrases checked separately (can't be tokenized as a single word)
-const BANNED_PHRASES = ["בן זונה"];
+const BANNED_PHRASES = [
+  "בן זונה",
+];
 
-const INVITE_REGEX = /(discord\.gg\/|discord(?:app)?\.com\/invite\/)/i;
+const INVITE_REGEX =
+  /(discord\.gg\/|discord(?:app)?\.com\/invite\/)/i;
 
-/* ============================================================
-   SECTION: Helpers
-   ============================================================ */
+// ============================================================
+// HELPERS
+// ============================================================
 
-/**
- * Tokenizes a message into lowercase words (Hebrew + English letters/digits only)
- * so we can match whole words instead of substrings inside innocent words.
- */
 function tokenize(text) {
   return text
     .toLowerCase()
-    .split(/[^\u05D0-\u05EA\u0041-\u005A\u0061-\u007A0-9]+/)
+    .split(/[^\u05D0-\u05EAa-zA-Z0-9]+/)
     .filter(Boolean);
 }
 
-function containsBannedContent(rawText) {
-  const text = rawText || "";
+function containsBannedContent(text) {
+  if (!text) return false;
+
   const lower = text.toLowerCase();
 
-  // Phrase check (substring, since it's a specific multi-word phrase)
   for (const phrase of BANNED_PHRASES) {
-    if (lower.includes(phrase.toLowerCase())) return true;
+    if (lower.includes(phrase.toLowerCase())) {
+      return true;
+    }
   }
 
-  // Whole-word check
   const words = tokenize(text);
-  return words.some((w) => BANNED_WORDS.includes(w));
+
+  return words.some((word) =>
+    BANNED_WORDS.includes(word)
+  );
 }
 
-function safeDelete(message) {
-  if (!message || !message.deletable) return Promise.resolve();
-  return message.delete().catch((err) => {
-    console.error(`⚠️ Could not delete message ${message.id}:`, err.message);
-  });
+async function deleteMessage(message) {
+  if (!message || !message.deletable) return;
+
+  try {
+    await message.delete();
+  } catch (error) {
+    console.error("⚠️ Could not delete message:", error.message);
+  }
 }
 
-function sendTemp(channel, content, ms = 6000) {
-  if (!channel) return;
-  channel
-    .send(content)
-    .then((sent) => {
-      setTimeout(() => safeDelete(sent), ms);
-    })
-    .catch((err) => {
-      console.error(`⚠️ Could not send temp message in #${channel.name || channel.id}:`, err.message);
-    });
+async function temporaryMessage(channel, text, time = 6000) {
+  try {
+    const msg = await channel.send(text);
+
+    setTimeout(async () => {
+      await deleteMessage(msg);
+    }, time);
+  } catch (error) {
+    console.error("⚠️ Could not send message:", error.message);
+  }
 }
 
-function hasClearPermission(member) {
+function canUseClear(member) {
   if (!member) return false;
-  if (member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return true;
-  if (config.allowedClearRoleId && member.roles.cache.has(config.allowedClearRoleId)) return true;
+
+  // Manage Messages permission
+  if (
+    member.permissions.has(
+      PermissionsBitField.Flags.ManageMessages
+    )
+  ) {
+    return true;
+  }
+
+  // Specific role from config
+  if (
+    config.allowedClearRoleId &&
+    member.roles.cache.has(config.allowedClearRoleId)
+  ) {
+    return true;
+  }
+
   return false;
 }
 
-/**
- * Updates the member-count channel name to reflect the current guild member count.
- * Never throws — logs and continues on any failure (missing channel/permission/rate limit).
- */
+// ============================================================
+// MEMBER COUNTER
+// ============================================================
+
 async function updateMemberCount(guild) {
   try {
     if (!config.memberCountChannelId) return;
-    const channel = guild.channels.cache.get(config.memberCountChannelId);
+
+    const channel = guild.channels.cache.get(
+      config.memberCountChannelId
+    );
+
     if (!channel) {
-      console.error("⚠️ Member count channel not found. Check memberCountChannelId in config.json.");
+      console.error(
+        "⚠️ Member count channel not found:",
+        config.memberCountChannelId
+      );
       return;
     }
-    const count = guild.memberCount;
-    const newName = `👥 חברים בשרת: ${count}`;
-    if (channel.name === newName) return; // avoid pointless renames (rate-limit friendly)
+
+    const newName = `👥 חברים בשרת: ${guild.memberCount}`;
+
+    if (channel.name === newName) return;
+
     await channel.setName(newName);
-  } catch (err) {
-    console.error("⚠️ Failed to update member count channel:", err.message);
+
+    console.log(
+      `👥 Member counter updated: ${guild.memberCount}`
+    );
+  } catch (error) {
+    console.error(
+      "⚠️ Member counter error:",
+      error.message
+    );
   }
 }
 
-/* ============================================================
-   SECTION: Welcome Embed Builder
-   ============================================================ */
+// ============================================================
+// WELCOME EMBED
+// ============================================================
 
-function buildWelcomeEmbed(member) {
+function createWelcomeEmbed(member) {
   const embed = new EmbedBuilder()
-    .setColor(config.embedColor || "#5865F2")
+    .setColor(COLOR)
     .setTitle("🇮🇱 ברוכים הבאים ל-SFS 🇮🇱")
     .setDescription(
-      `היי ${member}, כיף שהצטרפת אלינו ל-**Snapzy Frozi SL**! 💜\n` +
-        `כאן זה בית — קהילה ישראלית אמיתית של גיימינג, פינות חמד ובלגן טוב.\n\n` +
-        `📜 תעיף מבט על החוקים: <#${config.rulesChannelId}>\n` +
-        `💬 תגיד שלום בצ'אט הראשי: <#${config.generalChannelId}>\n\n` +
-        `תרגיש בבית, תכיר אנשים, ותיהנה 🔥`
+      `היי ${member}, כיף שהצטרפת ל-**Snapzy Frozi SL**! 💜\n\n` +
+      `כאן זה הבית של הקהילה שלנו — גיימינג, צ'אטים ובלגן טוב. 🔥\n\n` +
+      `📜 **חוקים:** <#${config.rulesChannelId}>\n` +
+      `💬 **צ'אט:** <#${config.generalChannelId}>\n\n` +
+      `תרגיש בבית ותיהנה! ❤️`
     )
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-    .setFooter({ text: "SFS — Snapzy Frozi SL" })
+    .setThumbnail(
+      member.user.displayAvatarURL({
+        size: 256,
+      })
+    )
+    .setFooter({
+      text: "SFS — Snapzy Frozi SL",
+    })
     .setTimestamp();
 
   if (BANNER_URL) {
@@ -172,261 +223,444 @@ function buildWelcomeEmbed(member) {
   return embed;
 }
 
-/* ============================================================
-   SECTION: guildMemberAdd — Welcome System
-   ============================================================ */
+// ============================================================
+// WELCOME
+// ============================================================
 
 client.on(Events.GuildMemberAdd, async (member) => {
+  console.log(
+    `👋 New member: ${member.user.tag}`
+  );
+
   try {
-    const embed = buildWelcomeEmbed(member);
+    const channel = member.guild.channels.cache.get(
+      config.welcomeChannelId
+    );
 
-    // Send embed to welcome channel
-    const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
-    if (welcomeChannel) {
-      try {
-        await welcomeChannel.send({ embeds: [embed] });
-      } catch (err) {
-        console.error("⚠️ Failed to send welcome embed to channel:", err.message);
-      }
+    if (channel) {
+      const embed = createWelcomeEmbed(member);
 
-      // Short text message, deleted after a few seconds
-      sendTemp(welcomeChannel, `${member} ברוך הבא יעמה! מקווים שתהנה 💜`, 8000);
+      await channel.send({
+        embeds: [embed],
+      });
+
+      await temporaryMessage(
+        channel,
+        `${member} ברוך הבא ל-SFS! 💜`,
+        8000
+      );
     } else {
-      console.error("⚠️ Welcome channel not found. Check welcomeChannelId in config.json.");
+      console.error(
+        "❌ Welcome channel not found!"
+      );
     }
 
-    // Try DM — never let a blocked DM crash the bot
+    // Try DM
     try {
-      await member.send({ embeds: [embed] });
-    } catch (err) {
-      console.log(`ℹ️ Could not DM ${member.user.tag} (DMs likely closed).`);
+      await member.send({
+        embeds: [createWelcomeEmbed(member)],
+      });
+    } catch {
+      console.log(
+        `ℹ️ Could not DM ${member.user.tag}`
+      );
     }
 
-    // Update member counter
     await updateMemberCount(member.guild);
-  } catch (err) {
-    console.error("⚠️ Error in guildMemberAdd handler:", err.message);
+
+  } catch (error) {
+    console.error(
+      "❌ Welcome system error:",
+      error.message
+    );
   }
 });
 
-/* ============================================================
-   SECTION: guildMemberRemove — Member Counter Update
-   ============================================================ */
+// ============================================================
+// MEMBER LEAVE
+// ============================================================
 
 client.on(Events.GuildMemberRemove, async (member) => {
-  try {
-    await updateMemberCount(member.guild);
-  } catch (err) {
-    console.error("⚠️ Error in guildMemberRemove handler:", err.message);
-  }
+  console.log(
+    `👋 Member left: ${member.user.tag}`
+  );
+
+  await updateMemberCount(member.guild);
 });
 
-/* ============================================================
-   SECTION: Clear ("ניקוי") Session State
-   ============================================================ */
+// ============================================================
+// CLEAR SYSTEM
+// ============================================================
 
-// key: `${channelId}-${userId}` -> { timeout }
-const pendingClearSessions = new Map();
+const clearSessions = new Map();
 
-function clearSessionKey(channelId, userId) {
+function sessionKey(channelId, userId) {
   return `${channelId}-${userId}`;
 }
 
-function startClearSession(channelId, userId) {
-  const key = clearSessionKey(channelId, userId);
-  // Clear any existing session/timeout for this user+channel first
-  const existing = pendingClearSessions.get(key);
-  if (existing) clearTimeout(existing.timeout);
+function startClear(channelId, userId) {
+  const key = sessionKey(channelId, userId);
+
+  if (clearSessions.has(key)) {
+    clearTimeout(clearSessions.get(key));
+  }
 
   const timeout = setTimeout(() => {
-    pendingClearSessions.delete(key);
-  }, 60 * 1000); // expires after 1 minute
+    clearSessions.delete(key);
+  }, 60000);
 
-  pendingClearSessions.set(key, { timeout });
+  clearSessions.set(key, timeout);
 }
 
-function endClearSession(channelId, userId) {
-  const key = clearSessionKey(channelId, userId);
-  const existing = pendingClearSessions.get(key);
-  if (existing) clearTimeout(existing.timeout);
-  pendingClearSessions.delete(key);
+function stopClear(channelId, userId) {
+  const key = sessionKey(channelId, userId);
+
+  if (clearSessions.has(key)) {
+    clearTimeout(clearSessions.get(key));
+  }
+
+  clearSessions.delete(key);
 }
 
-function hasActiveClearSession(channelId, userId) {
-  return pendingClearSessions.has(clearSessionKey(channelId, userId));
+function hasClearSession(channelId, userId) {
+  return clearSessions.has(
+    sessionKey(channelId, userId)
+  );
 }
 
-/* ============================================================
-   SECTION: Utility Command Embeds
-   ============================================================ */
+// ============================================================
+// EMBEDS
+// ============================================================
 
-function buildPingEmbed(ws) {
+function pingEmbed() {
   return new EmbedBuilder()
-    .setColor(config.embedColor || "#5865F2")
-    .setDescription(`🏓 Pong! \`${ws}ms\``);
+    .setColor(COLOR)
+    .setDescription(
+      `🏓 Pong! \`${client.ws.ping}ms\``
+    );
 }
 
-function buildServerEmbed(guild) {
+function serverEmbed(guild) {
   return new EmbedBuilder()
-    .setColor(config.embedColor || "#5865F2")
+    .setColor(COLOR)
     .setTitle(`🏠 ${guild.name}`)
-    .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }))
+    .setThumbnail(
+      guild.iconURL({
+        size: 256,
+      })
+    )
     .addFields(
-      { name: "👥 חברים", value: `${guild.memberCount}`, inline: true },
-      { name: "💬 ערוצים", value: `${guild.channels.cache.size}`, inline: true },
-      { name: "🆔 Server ID", value: `${guild.id}`, inline: false }
+      {
+        name: "👥 חברים",
+        value: `${guild.memberCount}`,
+        inline: true,
+      },
+      {
+        name: "💬 ערוצים",
+        value: `${guild.channels.cache.size}`,
+        inline: true,
+      },
+      {
+        name: "🆔 Server ID",
+        value: guild.id,
+      }
     )
     .setTimestamp();
 }
 
-function buildHelpEmbed() {
+function helpEmbed() {
   return new EmbedBuilder()
-    .setColor(config.embedColor || "#5865F2")
+    .setColor(COLOR)
     .setTitle("📖 SFS Bot — עזרה")
     .setDescription(
-      "🧹 **ניקוי** — ניקוי הודעות (למנהלים בלבד)\n" +
-        "🏓 **!ping** — בדיקת פינג\n" +
-        "🏠 **!server** — מידע על השרת\n" +
-        "📖 **!help** — הצגת עזרה\n\n" +
-        "🛡️ Auto-Mod פעיל\n" +
-        "🚫 Anti-Invite פעיל\n" +
-        "🎈 Welcome פעיל\n" +
-        "👥 Member Counter פעיל"
+      "🧹 **ניקוי** — מחיקת הודעות\n" +
+      "🏓 **!ping** — בדיקת פינג\n" +
+      "🏠 **!server** — מידע על השרת\n" +
+      "📖 **!help** — הצגת הפקודות\n\n" +
+      "🛡️ Auto-Mod פעיל\n" +
+      "🚫 Anti-Invite פעיל\n" +
+      "🎈 Welcome פעיל\n" +
+      "👥 Member Counter פעיל"
     )
-    .setFooter({ text: "SFS — Snapzy Frozi SL" });
+    .setFooter({
+      text: "SFS — Snapzy Frozi SL",
+    });
 }
 
-/* ============================================================
-   SECTION: messageCreate — Central Message Handler
-   ============================================================ */
+// ============================================================
+// MESSAGE HANDLER
+// ============================================================
 
 client.on(Events.MessageCreate, async (message) => {
   try {
     if (message.author.bot) return;
-    if (!message.guild) return; // ignore DMs for mod/command features
+    if (!message.guild) return;
 
     const content = message.content.trim();
     const channelId = message.channel.id;
     const userId = message.author.id;
 
-    /* ---------- 1) Active clear session: treat this message as the answer ---------- */
-    if (hasActiveClearSession(channelId, userId)) {
-      const amount = Number(content);
-      endClearSession(channelId, userId);
+    // --------------------------------------------------------
+    // CLEAR ANSWER
+    // --------------------------------------------------------
 
-      if (!Number.isInteger(amount) || amount < 1 || amount > 100) {
-        sendTemp(message.channel, "❌ התהליך בוטל.\nבחר מספר בין 1 ל-100.", 6000);
-        await safeDelete(message);
+    if (hasClearSession(channelId, userId)) {
+      const amount = Number(content);
+
+      stopClear(channelId, userId);
+
+      if (
+        !Number.isInteger(amount) ||
+        amount < 1 ||
+        amount > 100
+      ) {
+        await temporaryMessage(
+          message.channel,
+          "❌ התהליך בוטל.\nכתוב מספר בין 1 ל-100.",
+          6000
+        );
+
+        await deleteMessage(message);
         return;
       }
 
       try {
-        const deleted = await message.channel.bulkDelete(amount, true);
-        await safeDelete(message);
-        sendTemp(message.channel, `🧹 נמחקו ${deleted.size} הודעות בהצלחה.`, 6000);
-      } catch (err) {
-        console.error("⚠️ Bulk delete failed:", err.message);
-        sendTemp(
+        const deleted =
+          await message.channel.bulkDelete(
+            amount,
+            true
+          );
+
+        await deleteMessage(message);
+
+        await temporaryMessage(
           message.channel,
-          "❌ לא הצלחתי למחוק הודעות (ייתכן שחלקן ישנות מ-14 יום).",
+          `🧹 נמחקו ${deleted.size} הודעות בהצלחה.`,
+          6000
+        );
+      } catch (error) {
+        console.error(
+          "❌ Clear error:",
+          error.message
+        );
+
+        await temporaryMessage(
+          message.channel,
+          "❌ לא הצלחתי למחוק את ההודעות.",
           6000
         );
       }
+
       return;
     }
 
-    /* ---------- 2) "ניקוי" — start clear flow ---------- */
+    // --------------------------------------------------------
+    // ניקוי
+    // --------------------------------------------------------
+
     if (content === "ניקוי") {
-      if (!hasClearPermission(message.member)) {
-        sendTemp(message.channel, "❌ אין לך הרשאה להשתמש בפקודה הזו.", 5000);
+      if (!canUseClear(message.member)) {
+        await temporaryMessage(
+          message.channel,
+          "❌ אין לך הרשאה להשתמש בפקודה הזו.",
+          5000
+        );
+
         return;
       }
 
-      startClearSession(channelId, userId);
-      sendTemp(message.channel, "כמה? 🤔\nיש לך דקה לענות.\nכתוב מספר בין 1 ל-100.", 15000);
+      startClear(channelId, userId);
+
+      await temporaryMessage(
+        message.channel,
+        "🧹 כמה הודעות למחוק?\n\nיש לך דקה לענות.\nכתוב מספר בין **1 ל-100**.",
+        15000
+      );
+
       return;
     }
 
-    /* ---------- 3) !ping ---------- */
+    // --------------------------------------------------------
+    // !ping
+    // --------------------------------------------------------
+
     if (content === "!ping") {
-      await message.channel.send({ embeds: [buildPingEmbed(client.ws.ping)] });
+      await message.channel.send({
+        embeds: [pingEmbed()],
+      });
+
       return;
     }
 
-    /* ---------- 4) !server ---------- */
+    // --------------------------------------------------------
+    // !server
+    // --------------------------------------------------------
+
     if (content === "!server") {
-      await message.channel.send({ embeds: [buildServerEmbed(message.guild)] });
+      await message.channel.send({
+        embeds: [
+          serverEmbed(message.guild),
+        ],
+      });
+
       return;
     }
 
-    /* ---------- 5) !help ---------- */
+    // --------------------------------------------------------
+    // !help
+    // --------------------------------------------------------
+
     if (content === "!help") {
-      await message.channel.send({ embeds: [buildHelpEmbed()] });
+      await message.channel.send({
+        embeds: [helpEmbed()],
+      });
+
       return;
     }
 
-    /* ---------- 6) Anti-Invite ---------- */
-    if (INVITE_REGEX.test(content) && !hasClearPermission(message.member)) {
-      await safeDelete(message);
-      sendTemp(message.channel, `${message.author} 🚫 אסור לפרסם הזמנות לשרתים אחרים כאן.`, 6000);
+    // --------------------------------------------------------
+    // ANTI INVITE
+    // --------------------------------------------------------
+
+    if (
+      INVITE_REGEX.test(content) &&
+      !canUseClear(message.member)
+    ) {
+      await deleteMessage(message);
+
+      await temporaryMessage(
+        message.channel,
+        `${message.author} 🚫 אסור לפרסם הזמנות לשרתים אחרים כאן.`,
+        6000
+      );
+
       return;
     }
 
-    /* ---------- 7) Auto-Mod (profanity) ---------- */
+    // --------------------------------------------------------
+    // AUTO MOD
+    // --------------------------------------------------------
+
     if (containsBannedContent(content)) {
-      await safeDelete(message);
-      sendTemp(message.channel, `${message.author} ⚠️ שים לב לשפה שלך בבקשה.`, 6000);
+      await deleteMessage(message);
+
+      await temporaryMessage(
+        message.channel,
+        `${message.author} ⚠️ שים לב לשפה שלך בבקשה.`,
+        6000
+      );
+
       return;
     }
-  } catch (err) {
-    console.error("⚠️ Error in messageCreate handler:", err.message);
+
+  } catch (error) {
+    console.error(
+      "❌ Message handler error:",
+      error.message
+    );
   }
 });
 
-/* ============================================================
-   SECTION: Ready
-   ============================================================ */
+// ============================================================
+// BOT READY
+// ============================================================
 
-client.once(Events.ClientReady, async (c) => {
-  console.log(`✅ Logged in as ${c.user.tag}`);
+client.once(Events.ClientReady, async (bot) => {
+  console.log("");
+  console.log("====================================");
+  console.log("✅ SFS BOT IS ONLINE!");
+  console.log(`🤖 Logged in as: ${bot.user.tag}`);
+  console.log(`🆔 Bot ID: ${bot.user.id}`);
+  console.log(`🏠 Servers: ${bot.guilds.cache.size}`);
+  console.log("====================================");
+  console.log("");
 
-  for (const guild of c.guilds.cache.values()) {
+  for (const guild of bot.guilds.cache.values()) {
     try {
-      await guild.members.fetch(); // ensure accurate memberCount
-    } catch (err) {
-      console.error(`⚠️ Could not fetch members for ${guild.name}:`, err.message);
+      await guild.members.fetch();
+    } catch (error) {
+      console.error(
+        `⚠️ Could not fetch members for ${guild.name}:`,
+        error.message
+      );
     }
+
     await updateMemberCount(guild);
   }
 });
 
-/* ============================================================
-   SECTION: Global error safety nets
-   ============================================================ */
+// ============================================================
+// DISCORD ERRORS
+// ============================================================
 
-client.on("error", (err) => console.error("⚠️ Discord client error:", err.message));
-process.on("unhandledRejection", (err) => console.error("⚠️ Unhandled rejection:", err));
-process.on("uncaughtException", (err) => console.error("⚠️ Uncaught exception:", err));
+client.on("error", (error) => {
+  console.error(
+    "❌ Discord Client Error:",
+    error.message
+  );
+});
 
-/* ============================================================
-   SECTION: Render Web Service — HTTP keepalive server
-   Render's web service type requires an open port to avoid
-   "Port scan timeout reached, no open ports detected."
-   ============================================================ */
+client.on("warn", (message) => {
+  console.warn(
+    "⚠️ Discord Warning:",
+    message
+  );
+});
 
-const PORT = Number(process.env.PORT) || 10000;
+process.on("unhandledRejection", (error) => {
+  console.error(
+    "❌ Unhandled Promise Rejection:",
+    error
+  );
+});
 
-http
-  .createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("SFS Bot is running!");
-  })
-  .listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 HTTP keepalive server listening on 0.0.0.0:${PORT}`);
+process.on("uncaughtException", (error) => {
+  console.error(
+    "❌ Uncaught Exception:",
+    error
+  );
+});
+
+// ============================================================
+// RENDER HTTP SERVER
+// ============================================================
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/plain; charset=utf-8",
   });
 
-/* ============================================================
-   SECTION: Login
-   ============================================================ */
+  res.end("SFS Bot is running!");
+});
 
-client.login(TOKEN);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(
+    `🌐 Render HTTP server running on port ${PORT}`
+  );
+});
+
+// ============================================================
+// LOGIN
+// ============================================================
+
+console.log("🔌 Connecting to Discord...");
+
+client
+  .login(TOKEN)
+  .then(() => {
+    console.log("✅ Discord login successful!");
+  })
+  .catch((error) => {
+    console.error("");
+    console.error("====================================");
+    console.error("❌ DISCORD LOGIN FAILED");
+    console.error("====================================");
+    console.error("Error:", error.message);
+    console.error("");
+    console.error(
+      "Check that DISCORD_TOKEN in Render is correct."
+    );
+    console.error("");
+    process.exit(1);
+  });
+```
