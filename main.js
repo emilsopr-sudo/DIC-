@@ -1,3 +1,14 @@
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('הבוט פעיל 24/7!');
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
